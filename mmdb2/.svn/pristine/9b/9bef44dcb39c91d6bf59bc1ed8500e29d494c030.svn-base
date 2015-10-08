@@ -1,0 +1,89 @@
+package com.mmdb.buz.task;
+
+import com.mmdb.core.utils.Return;
+
+/**
+ * 任务 业务逻辑层
+ *
+ * @author XIE
+ */
+
+/**
+ * @author XIE
+ *
+ */
+public interface ITaskBuz {
+    /**
+     * 获取所有任务
+     *
+     * @param name
+     *            任务名称(null时获取全部)
+     * @return
+     * @throws Exception
+     */
+    Return get(String name);
+
+    /**
+     * 保存任务
+     *
+     * @param name
+     *            任务名称
+     * @param timing
+     *            {runtime:"执行时间",触发频率:"one",time:"2013-12-17 10:23"}执行一次</br>
+     *            {runtime:执行时间,触发频率:"day",time:"2013-12-17 10:23",间隔时间:2}每天执行</br>
+     *            {runtime:执行时间,触发频率:"week",time:"2013-12-17 10:23",间隔时间:2,星期:1,2,3}每周执行</br>
+     *            {runtime:执行时间,触发频率:"month",time:"2013-12-17 10:23",月份:8,10,日期:1,2,3,4} 定时器 "秒 分 时 天 月 周 年" 空格分割
+     * @param mapping
+     *            {"dbCiMap":[db01],"inCiMap":[m01,m02],"outCiMap":[om1,0m2],
+     *            "outKpiMap":[k01]} 映射
+     * @return
+     */
+    Return save(String name, String timing, String mapping);
+
+    /**
+     * 编辑任务
+     *
+     * @param name
+     *            任务名称
+     * @param timing
+     *            {runtime:"执行时间",触发频率:"one",time:"2013-12-17 10:23"}执行一次</br>
+     *            {runtime:执行时间,触发频率:"day",time:"2013-12-17 10:23",间隔时间:2}每天执行</br>
+     *            {runtime:执行时间,触发频率:"week",time:"2013-12-17 10:23",间隔时间:2,星期:1,2,3}每周执行</br>
+     *            {runtime:执行时间,触发频率:"month",time:"2013-12-17 10:23",月份:8,10,日期:1,2,3,4} 定时器 "秒 分 时 天 月 周 年" 空格分割
+     * @param mapping
+     *            {"dbCiMap":[db01],"inCiMap":[m01,m02],"outCiMap":[om1,0m2],
+     *            "outKpiMap":[k01]} 映射
+     * @return
+     */
+    Return update(String name, String timing, String mapping);
+
+    /**
+     * 设置任务开关状态
+     *
+     * @param name
+     *            任务名称
+     * @param status
+     *            任务状态
+     * @return
+     */
+    Return setTasksStatus(String name, boolean status);
+
+    /**
+     * 删除任务
+     *
+     * @param name
+     *            任务名称
+     * @return
+     */
+    Return deleteTask(String name);
+
+    /**
+     * 立即执行任务
+     *
+     * @param name
+     *            任务名称
+     * @return
+     */
+    Return runNow(String name);
+
+}

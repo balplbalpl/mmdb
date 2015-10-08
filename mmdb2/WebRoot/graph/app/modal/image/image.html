@@ -1,0 +1,45 @@
+<div class="modal-header clearfix">
+	<button class="btn btn-success pull-right" ng-show="!isUpload" ng-click="isUpload = !isUpload">上传图片 >></button>
+	<button class="btn btn-default pull-right" ng-show="isUpload" ng-click="isUpload = !isUpload"><< 返回</button>
+	<h3 class="modal-title">图片选择</h3>
+</div>
+<div class="modal-body graph-image">
+
+	<div class="well graph-image-upload" ng-show="isUpload">
+		<div class="row">
+			<div class="col-md-6">
+				<div class="alert alert-success"
+					style="height: 200px"
+					 ngf-select ngf-drop
+					 ngf-change="selectFile($files)"
+					 ngf-accept="'*.png,*.gif,*.jpg,*.jpeg'">点击这里，或者拖拽图片到此区域上传</div>
+			</div>
+
+			<div class="col-md-6 text-center" ng-show="image">
+				<img ng-src="{{image}}" class="graph-image-preview" />
+				<p class="text-center mt5" ng-show="!startUpload" ng-click="upload()"><button class="btn btn-success btn-xs">开始上传</button></p>
+			</div>
+		</div>
+
+	</div>
+
+	<div class="graph-image-items clear">
+		<div ng-repeat="item in images" class="graph-image-item" ng-click="click(item)">
+			<img ng-src="{{staticUrl(item.url)}}" class="img-thumbnail img-rounded" />
+			<i ng-show="selectItem.url == item.url" class="text-success fa fa-check-circle fa-2x"></i>
+			<button class="btn btn-danger btn-xs" ng-click="remove(item)">
+				<i class="fa fa-trash"></i>
+			</button>
+		</div>
+	</div>
+
+	<div ng-show="!images.length" class="alert alert-warning">
+		点击右上角按钮上传一张图片吧
+	</div>
+
+</div>
+
+<div class="modal-footer">
+	<button class="btn btn-warning" ng-click="$modal.close()">取消</button>
+	<button class="btn btn-primary" ng-show="selectItem" ng-click="ok()">确认</button>
+</div>

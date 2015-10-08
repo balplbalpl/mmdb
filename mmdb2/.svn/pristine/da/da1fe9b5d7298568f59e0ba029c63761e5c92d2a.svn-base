@@ -1,0 +1,137 @@
+<div class="h100">
+	<tabset class="h100">
+
+		<tab select="alertMe()">
+			<tab-heading>
+				阈值设置
+			</tab-heading>
+			<div class="modal-body" style="background-color: transparent">
+				<div class="ciDropdown">
+					<div class="thresholdFilter clearfix">
+						<input type="text" placeholder="过滤CI、KPI名称" class="form-control pull-right threshold-input" ng-model="obj.filter"/>
+					</div>
+					<div class="thresholdTable" ng-scroll >
+						<table class="table w100" ng-table="tableParams">
+							<tr ng-repeat="item in list = ($data | filter: filterMethod)">
+								<td data-title="'CI分类'"><span>{{item.ci.categoryName}}</span></td>
+								<td data-title="'CI名称'" sortable="'ci.name'"><span>{{item.ci.name}}</span></td>
+								<td data-title="'KPI分类'"><span>{{item.kpi.kpiCategoryName}}</span></td>
+								<td data-title="'KPI名称'" sortable="'kpi.name'"><span>{{item.kpi.name}}</span></td>
+								<td data-title="'警告阈值'"><input type="text" ng-model="item.threshold[0].threshold[3].lowLimit"> - <input type="text" ng-model="item.threshold[0].threshold[3].highLimit"></td>
+								<td data-title="'严重阈值'"><input type="text" ng-model="item.threshold[0].threshold[0].lowLimit"> - <input type="text" ng-model="item.threshold[0].threshold[0].highLimit"></td>
+								<td data-title="'是否生效'">
+									<input bs-switch
+										   ng-model="item.ifEnable" ng-init="item.ifEnable === null ? item.ifEnable = true : item.ifEnable"
+										   type="checkbox" switch-on-text="启用"
+										   switch-off-text="禁用" />
+								</td>
+								<td data-title="'是否通知'">
+									<input bs-switch
+										   ng-model="item.ifNotify" ng-init="item.ifNotify === null ? item.ifNotify = false : item.ifNotify"
+										   type="checkbox" switch-on-text="开启"
+										   switch-off-text="关闭" />
+								</td>
+							</tr>
+							<tr ng-show="!list.length">
+								<td colspan="12" class="result-ci-alert-td">
+									<div class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有数据</div>
+								</td>
+							</tr>
+						</table>
+					</div>
+				</div>
+				<div class="modal-footer clearfix">
+					<div class="alert alert-warning mt20 mr20 ml20 mb20 threshold-hint pull-left"><i class="fa fa-exclamation-circle"></i> 修改后请点击右下方 <b>保存此页</b> 按钮保存此页数据</div>
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+					<button class="btn btn-primary" ng-click="saveThreshold()">保存此页</button>
+				</div>
+			</div>
+		</tab>
+
+		<tab select="showMonitor()">
+			<tab-heading>
+				监控
+			</tab-heading>
+			<div class="modal-body">
+				<div class="ciDropdown">
+					<div class="thresholdFilter clearfix">
+						<div class="alert alert-warning mt20 mr20 ml20 mb20 pull-left	"> 当前采集的监控为 <span style="color: darkgreen; font-weight: bold;">{{nowTime}}</span> 的监控数据 <span ng-click="refreshMonitor()" style="font-weight: bold; cursor: pointer;">点击刷新</span></div>
+						<input type="text" placeholder="过滤CI、KPI名称" class="form-control pull-right mt20 mr20 ml20 mb20 " ng-model="obj.filter"/>
+					</div>
+					<div class="thresholdTable" ng-scroll >
+						<table class="table w100" ng-table="tableParams1">
+							<tr ng-repeat-start="item in list = ($data | filter: filterMethodByMonitor)">
+								<td data-title="'CI分类'"><span>{{item.ciCate}}</span></td>
+								<td data-title="'CI名称'" sortable="'ciName'"><span>{{item.ciName}}</span></td>
+								<td data-title="'KPI分类'"><span>{{item.kpiCate}}</span></td>
+								<td data-title="'KPI名称'" sortable="'kpiName'"><span>{{item.kpiName}}</span></td>
+								<td data-title="'当前值'" sortable="'val'"><span>{{item.val}}</span></td>
+								<td data-title="'查看历史监控'">
+									<button ng-click="item._expand = !item._expand" class="btn btn-link btn-xs noselect">
+										<i class="fa fa-area-chart" ng-show="!item._expand"></i>
+										<i class="fa fa-area-chart" ng-show="item._expand"></i>
+									</button>
+								</td>
+							</tr>
+							<tr ng-repeat-end ng-show="item._expand">
+								<td colspan="12">
+									abc
+								</td>
+							</tr>
+							<tr ng-show="!list.length">
+								<td colspan="12" class="result-ci-alert-td">
+									<div class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有数据</div>
+								</td>
+							</tr>
+						</table>
+					</div>
+				</div>
+				<div class="modal-footer clearfix">
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+				</div>
+			</div>
+		</tab>
+
+		<tab select="showMonitor()">
+			<tab-heading>
+				事件
+			</tab-heading>
+			<div class="modal-body">
+				<div class="ciDropdown">
+					<div class="thresholdFilter clearfix">
+						<input type="text" placeholder="过滤CI、KPI名称" class="form-control pull-right" ng-model="filter"/>
+					</div>
+					<div class="thresholdTable" ng-scroll >
+						<table class="table w100" ng-table="tableParams2">
+							<tr ng-repeat-start="item in list = ($data | filter: filterMethod234)">
+								<td data-title="'CI分类'"><span>{{item.ci.categoryName}}</span></td>
+								<td data-title="'CI名称'" sortable="'ci.name'"><span>{{item.ci.name}}</span></td>
+								<td data-title="'KPI分类'"><span>{{item.kpi.kpiCategoryName}}</span></td>
+								<td data-title="'KPI名称'" sortable="'kpi.name'"><span>{{item.kpi.name}}</span></td>
+								<td data-title="'事件列表'">
+									<button ng-click="item._expand = !item._expand" class="btn btn-link btn-xs noselect">
+										<i class="fa fa-plus" ng-show="!item._expand"></i>
+										<i class="fa fa-minus" ng-show="item._expand"></i>
+									</button>
+								</td>
+							</tr>
+							<tr ng-repeat-end ng-show="item._expand">
+								<td colspan="12">
+									abc
+								</td>
+							</tr>
+							<tr ng-show="!list.length">
+								<td colspan="12" class="result-ci-alert-td">
+									<div class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有数据</div>
+								</td>
+							</tr>
+						</table>
+					</div>
+				</div>
+				<div class="modal-footer clearfix">
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+				</div>
+			</div>
+		</tab>
+	</tabset>
+</div>

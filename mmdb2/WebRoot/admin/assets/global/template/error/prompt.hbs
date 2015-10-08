@@ -1,0 +1,29 @@
+
+<div class="alert_prompt" style="
+	width: 400px;
+  height: 150px;
+  background-color: #000;
+  position: fixed;
+
+
+  z-index: 100000;
+  right: 0;
+
+  top: 0;
+	">
+
+
+
+    <div class="text-right alert_prompt_title">
+        <!--<i class="fa fa-trash-o" style="font-size: 20px"></i>-->
+
+        <i class="fa fa-times fa-lg alert_prompt_hide"></i>
+    </div>
+
+
+    <div class="alert_prompt_body" style=" overflow: auto;">
+		{{#each list}}
+            <div>{{this}}</div>
+		{{/each}}
+    </div>
+</div>

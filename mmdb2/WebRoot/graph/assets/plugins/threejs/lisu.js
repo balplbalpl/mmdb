@@ -1,0 +1,30 @@
+if (_typeface_js && _typeface_js.loadFace) _typeface_js.loadFace({
+	"glyphs":{},
+	"cssFontWeight":"normal",
+	"ascender":1194,
+	"underlinePosition":-59,
+	"cssFontStyle":"normal",
+	"boundingBox":{"yMin":-255,"xMin":54.25,"yMax":1194,"xMax":1378.046875},
+	"resolution":1000,
+	"original_font_information":{
+		"postscript_name":"LiSu",
+		"version_string":"Version 3.01",
+		"vendor_url":"",
+		"full_font_name":"LiSu",
+		"font_family_name":"LiSu",
+		"copyright":"(C) Copyright Stone Co., 1996",
+		"description":"",
+		"trademark":"Trademark of Stone Co., Beijing",
+		"designer":"",
+		"designer_url":"",
+		"unique_font_identifier":"LiSu",
+		"license_url":"",
+		"license_description":"",
+		"manufacturer_name":"",
+		"font_sub_family_name":"Regular"
+	},
+	"descender":-196,
+	"familyName":"LiSu",
+	"lineHeight":1584,
+	"underlineThickness":13
+});

@@ -1,0 +1,9 @@
+<div class="search-home">
+    <img src="assets/images/logo.svg" class="search-logo"/>
+    <input type="text" class="home-input-search" ng-enter="search()" ng-model="keyword" />
+</div>
+
+
+
+
+

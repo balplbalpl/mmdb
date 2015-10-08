@@ -1,0 +1,252 @@
+package com.mmdb.rest.icon;
+
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.util.List;
+import java.util.Map;
+
+import net.sf.json.JSONObject;
+
+import org.apache.commons.fileupload.FileItem;
+import org.apache.commons.fileupload.FileUploadException;
+import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.Form;
+import org.restlet.data.Header;
+import org.restlet.data.Status;
+import org.restlet.ext.fileupload.RestletFileUpload;
+import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
+import org.restlet.resource.ServerResource;
+import org.restlet.util.Series;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.MD5;
+import com.mmdb.core.utils.SpringContextUtil;
+import com.mmdb.model.bean.Page;
+import com.mmdb.model.bean.User;
+import com.mmdb.model.icon.ViewIcon;
+import com.mmdb.service.icon.IViewIconService;
+import com.mmdb.service.role.IUserService;
+import com.mmdb.util.des.Des;
+
+public class ViewIconRest extends ServerResource {
+	private Log log = LogFactory.getLogger("ViewIconRest");
+	private IViewIconService iconService;
+	private IUserService userService;
+
+	@Override
+	public void init(Context context, Request request, Response response) {
+		super.init(context, request, response);
+		iconService = (IViewIconService) SpringContextUtil
+				.getBean("viewIconService");
+		userService = (IUserService) SpringContextUtil
+				.getApplicationContext().getBean("userService");
+	}
+
+	@Get
+	public Representation getMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				getResponse().setStatus(new Status(600));
+				ret.put("message", e.getMessage());
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+		try {
+			if (param1 == null || "".equals(param1)) {
+			} else if (param1 != null && "".equals(param1)) {
+				// return getByName(param1);
+			} else if ("export".equals(param1)) {// 导出全部,包含内容
+				// return exportData();
+			} else {
+				// return getByid(param1);
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			getResponse().setStatus(new Status(600));
+			ret.put("message", e.getMessage());
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@Post
+	public Representation postMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				getResponse().setStatus(new Status(600));
+				ret.put("message", e.getMessage());
+			}
+		}
+
+		try {
+			if ("save".equals(param1)) {
+				return save(entity);
+			}
+
+			Form form = entity == null ? null : new Form(entity);
+			String operation = null;
+			String queryString = form.getQueryString();
+			operation = URLDecoder.decode(queryString, "utf-8");
+			operation = new String(operation.getBytes("iso-8859-1"), "utf-8");
+
+			JSONObject params = JSONObject.fromObject(operation);
+
+			return query(params);
+		} catch (Exception e) {
+			log.eLog(e);
+			getResponse().setStatus(new Status(600));
+			ret.put("message", e.getMessage());
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@Delete
+	public Representation delMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+		if (param1 == null || "".equals(param1)) {
+			return clear();
+		} else {// 删除一个属性
+			return deleteByName(param1);
+		}
+	}
+
+	private Representation save(Representation entity) throws Exception {
+		log.dLog("save icon");
+		JSONObject ret = new JSONObject();
+		DiskFileItemFactory factory = new DiskFileItemFactory();
+		RestletFileUpload upload = new RestletFileUpload(factory);
+
+		List<FileItem> items = null;
+		try {
+			items = upload.parseRepresentation(entity);
+		} catch (FileUploadException e) {
+			log.eLog(e);
+		}
+
+		String filename = "";
+		try {
+			for (FileItem fi : items) {
+				String contentType = fi.getContentType();
+				if (contentType == null || !contentType.startsWith("image")) {
+					throw new Exception("文件格式有误");
+				}
+				InputStream is = fi.getInputStream();
+				if (is.available() > 524288) {// 512kb
+					throw new Exception("文件太大了");
+				}
+				User user = getUser();
+				filename = fi.getName();
+
+				filename = new String(filename.getBytes("gbk"), "utf-8");
+
+				ViewIcon viewIcon = iconService.getByName(filename,
+						user.getLoginName());
+				if (viewIcon != null) {
+					throw new Exception("图片[" + filename + "]已经存在!");
+				}
+
+				byte[] content = new byte[is.available()];
+				is.read(content);
+				ViewIcon icon = new ViewIcon(filename, user.getLoginName(),
+						contentType, content, MD5.md5(content));
+
+				ViewIcon save = iconService.save(icon);
+			}
+			ret.put("message", "保存成功");
+			log.dLog("save success");
+		} catch (Exception e) {
+			throw e;
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation query(JSONObject data) throws Exception {
+		JSONObject ret = new JSONObject();
+		int page = data.getInt("page");
+		int pageSize = data.getInt("pageSize");
+		String name = "";
+		try {
+			name = data.getString("like");
+		} catch (Exception e) {
+		}
+		Page<Map<String, Object>> content = iconService.fuzzyQuery(name, page,
+				pageSize, getUser().getLoginName());
+		List<Map<String, Object>> datas = content.getDatas();
+		JSONObject retData = new JSONObject();
+		retData.put("page", page);
+		retData.put("pageSize", pageSize);
+		retData.put("datas", datas);
+		retData.put("count", content.getTotalCount());
+
+		ret.put("data", retData);
+		ret.put("message", "获取全部数据成功");
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation deleteByName(String name) {
+		JSONObject ret = new JSONObject();
+		try {// 前台上没带后缀的图片名称所以这里加个后缀
+			iconService.deleteByName(name, getUser().getLoginName());
+			ret.put("message", "删除成功!");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation clear() {
+		JSONObject ret = new JSONObject();
+		try {// 前台上没带后缀的图片名称所以这里加个后缀
+			iconService.deleteAll(getUser().getLoginName());
+			ret.put("message", "删除成功!");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	public User getUser() {
+		Series<Header> headers = getRequest().getHeaders();
+		String values = headers.getValues("token");
+		if (values == null || "".equals(values))
+			return null;
+		Des des = new Des();
+		String decrypt = des.decrypt(values);
+		String[] split = decrypt.split("\\|");
+		return userService.getUserByLoginName(split[0]);
+	}
+}

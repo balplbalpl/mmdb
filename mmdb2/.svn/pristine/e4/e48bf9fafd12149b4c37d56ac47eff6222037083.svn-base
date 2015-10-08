@@ -1,0 +1,101 @@
+package com.mmdb.buz.mapping;
+
+import com.mmdb.core.utils.Return;
+
+import java.util.List;
+import java.util.Map;
+
+import org.directwebremoting.io.FileTransfer;
+
+/**
+ * 数据库映射
+ * Created by XIE on 2015/3/31.
+ */
+public interface ISourceCategoryMapBuz {
+    /**
+     * 获取所有db映射
+     *
+     * @param id 映射名称(null获取全部)
+     * @return
+     */
+    Return get(String id);
+
+    /**
+     * 保存db映射
+     *
+     * @param id     映射名称
+     * @param cateId 分类id
+     * @param dpId   dbPool配置
+     * @param fMap   字段映射
+     * @return
+     */
+    Return save(String id, String cateId, String dpId, Map<String, String> fMap);
+
+    /**
+     * 删除db映射
+     *
+     * @param id 数据库映射名称
+     */
+    Return deleteById(String id);
+
+    /**
+     * 更新db映射
+     *
+     * @param id     映射名称
+     * @param cateId 分类id
+     * @param dpId   dbPool配置
+     * @param fMap   字段映射
+     * @return
+     * @throws Exception
+     */
+    Return update(String id, String cateId, String dpId, Map<String, String> fMap);
+
+    /**
+     * 执行映射，处理数据间的关系
+     *
+     * @param id 数据库映射
+     * @return
+     * @throws Exception
+     */
+    Return runNowById(String id);
+
+    /**
+     * 比较两个字符串相似度
+     *
+     * @param strs1 字符串1
+     * @param strs2 字符串2
+     * @return
+     */
+    Return compare(List<String> strs1, List<String> strs2);
+
+    /**
+     * 导入数据库映射
+     *
+     * @param ftf 文件
+     * @return
+     */
+    Return importJson(FileTransfer ftf);
+
+    Return importMapping();
+
+    /**
+     * 导出数据库映射为Json文件
+     * @return
+     * @throws Exception
+     */
+    FileTransfer exportJson() throws Exception;
+
+    /**
+     * 导入数据库映射为XML文件
+     * @param ftf
+     * @return
+     */
+	Return importXML(FileTransfer ftf);
+
+	/**
+	 * 导出数据库映射为XML文件
+	 * @return
+	 * @throws Exception
+	 */
+	FileTransfer exportXML() throws Exception;
+}

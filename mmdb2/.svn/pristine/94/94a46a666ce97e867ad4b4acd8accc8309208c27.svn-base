@@ -1,0 +1,96 @@
+package com.mmdb.buz.mapping;
+
+import com.mmdb.core.utils.Return;
+import org.directwebremoting.io.FileTransfer;
+
+import java.util.Map;
+
+/**
+ * 外部数据关系映射
+ * Created by XIE on 2015/3/31.
+ */
+public interface ISourceRelationMapBuz {
+    /**
+     * 获取外表分类映射
+     *
+     * @param id 映射名称(不可重复),null时获取全部
+     * @return
+     */
+    Return get(String id);
+
+    /**
+     * 保存外表分类映射
+     *
+     * @param id       映射名称
+     * @param rCateId  关系分类id
+     * @param relValue 关系类型属性值
+     * @param cateMap  配置项分类信息{"sCate":"x86","eCate":"物理组件","sField":"起点字段",
+     *                 "eField":"终点字段"}
+     * @param dbMap    数据库信息{"dbName":"mysql01","table":"表名","sField":"表起点字段",
+     *                 "eField":"表终点字段"}
+     * @return
+     */
+    Return save(String id, String rCateId, Map relValue, Map<String, String> cateMap,
+                Map<String, String> dbMap);
+
+    /**
+     * 更新外表配置项映射
+     *
+     * @param id       映射名称
+     * @param rCateId  关系分类id
+     * @param relValue 关系类型属性值
+     * @param cateMap  配置项分类信息{"sCate":"x86","eCate":"物理组件","sField":"起点字段",
+     *                 "eField":"终点字段"}
+     * @param dbMap    数据库信息{"dbName":"mysql01","table":"表名","sField":"表起点字段",
+     *                 "eField":"表终点字段"}
+     * @return
+     */
+    Return update(String id, String rCateId, Map relValue, Map<String, String> cateMap,
+                  Map<String, String> dbMap);
+
+    /**
+     * 删除一个外表关系映射
+     *
+     * @param id 关系映射名称(不可重复)
+     * @return
+     */
+    Return deleteByName(String id);
+
+    /**
+     * 立即执行一个外表关系映射
+     *
+     * @param id 关系映射名称(不可重复)
+     * @return
+     */
+    Return runNowByName(String id);
+
+    /**
+     * 导入外部数据关系映射
+     *
+     * @param ftf 文件
+     * @return
+     */
+    Return importJson(FileTransfer ftf);
+
+    /**
+     * 导出外部数据关系映射
+     *
+     * @return
+     * @throws Exception
+     */
+    FileTransfer exportJson() throws Exception;
+
+    /**
+     * 导入外部数据关系映射的XML文件
+     * @param ftf
+     * @return
+     */
+	Return importXML(FileTransfer ftf);
+
+	/**
+	 * 导出外部数据关系映射为XML文件
+	 * @return
+	 * @throws Exception
+	 */
+	FileTransfer exportXML() throws Exception;
+}

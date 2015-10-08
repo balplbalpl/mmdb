@@ -1,0 +1,330 @@
+package com.mmdb.model.info.storage;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.neo4j.shell.util.json.JSONException;
+import org.neo4j.shell.util.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import com.ibm.db2.jcc.am.v;
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.categroy.ViewCategory;
+import com.mmdb.model.categroy.UserCategory;
+import com.mmdb.model.categroy.storage.UserCateStorage;
+import com.mmdb.model.database.bean.DataBaseConfig;
+import com.mmdb.model.db.neo4jdb.Neo4jDao;
+import com.mmdb.model.info.CiInformation;
+import com.mmdb.model.info.ViewInformation;
+import com.mmdb.model.info.UserInformation;
+import com.mmdb.model.mapping.SourceToCategoryMapping;
+import com.mmdb.mongo.MongoConnect;
+import com.mmdb.util.HexString;
+import com.mmdb.util.Neo4jStringUtils;
+
+@Component("userInfoStorage")
+public class UserInfoStorage {
+
+	private Log log = LogFactory.getLogger("UserInfoStorage");
+
+	@Autowired
+	private UserCateStorage userCateStorage;
+
+	/**
+	 * 批量删除
+	 * 
+	 * @param list
+	 * @throws Exception
+	 */
+	public void delete(List<UserInformation> list) {
+		for (UserInformation uc : list) {
+			this.delete(uc);
+		}
+	}
+
+	/**
+	 * 单个删除
+	 * 
+	 * @param uInfo
+	 * @throws Exception
+	 */
+	public void delete(UserInformation uInfo) {
+		String del = "delete from User where jsonId = '" + getJsonId(uInfo)
+				+ "'";
+		try {
+			MongoConnect.executeUpdate(del);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * 清空
+	 * 
+	 * @throws Exception
+	 */
+	public void deleteAll() {
+		String del = "delete from User";
+		try {
+			MongoConnect.executeUpdate(del);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	/**
+	 * 检查是否存在
+	 * 
+	 * @param nodeid
+	 * @return
+	 */
+	public boolean exist(UserInformation uInfo) {
+		try {
+			if (getByJsonId(getJsonId(uInfo)) == null) {
+				return false;
+			}
+		} catch (Exception e) {
+		}
+		return true;
+	}
+
+	/**
+	 * 获取全部用户
+	 * 
+	 * @return
+	 * @throws Exception
+	 */
+	public List<UserInformation> getAll() {
+		String match = "select * from User";
+		return query(match);
+	}
+
+	public List<UserInformation> getByProperty(String key, Object value) {
+		String match = "select * from User where `" + key + "`='" + value + "'";
+		return query(match);
+	}
+
+	public UserInformation getInfoInCate(String cateId, String userId)
+			throws Exception {
+		return getByJsonId(getJsonId(cateId, userId));
+	}
+
+	public UserInformation getByJsonId(String jsonId) throws Exception {
+		String match = "select * from User where `jsonId`='" + jsonId + "'";
+		List<UserInformation> list = query(match);
+		if (list.size() == 1) {
+			return list.get(0);
+		} else if (list.size() > 1) {
+			log.eLog("用户[" + jsonId + "]不唯一");
+			throw new Exception("用户[" + jsonId + "]不唯一");
+		} else {
+			return null;
+		}
+	}
+
+	/**
+	 * 保存节点
+	 * 
+	 * @param t
+	 * @return
+	 * @throws Exception
+	 */
+	public UserInformation save(UserInformation uInfo) throws Exception {
+		PreparedStatement pstmt = null;
+		try {
+			log.dLog("用户[" + uInfo.getUsername() + "]开始创建!");
+			Map<String, String> asMap = asMap(uInfo);
+			Connection conn = MongoConnect.getConnection();
+			StringBuffer crt = new StringBuffer();
+			Set<String> keySet = asMap.keySet();
+			crt.append("insert into User(");
+			StringBuffer v = new StringBuffer();
+			for (String key : keySet) {
+				crt.append("`");
+				crt.append(key);
+				crt.append("`,");
+
+				v.append("?,");
+			}
+			crt.delete(crt.length() - 1, crt.length());
+			v.delete(v.length() - 1, v.length());
+			crt.append(") values (");
+			crt.append(v);
+			v = null;
+			crt.append(")");
+
+			pstmt = conn.prepareStatement(crt.toString());
+			int i = 0;
+			for (String key : keySet) {
+				pstmt.setString(++i, asMap.get(key));
+			}
+			pstmt.executeUpdate();
+			List<UserInformation> users = query("select * from User where jsonId = '"
+					+ asMap.get("jsonId") + "'");
+			if (users.size() == 1) {
+				log.dLog("用户[" + uInfo.getUsername() + "]创建成功!");
+				return users.get(0);
+			} else {
+				throw new Exception("用户[" + uInfo.getUsername() + "]创建失败!");
+			}
+		} catch (Exception e) {
+			delete(uInfo);
+			throw e;
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		}
+	}
+
+	/**
+	 * 传对象修改 用户
+	 * 
+	 * @param t
+	 * @return
+	 * @throws Exception
+	 */
+	public UserInformation update(UserInformation t) throws Exception {
+		StringBuffer upd = new StringBuffer();
+		upd.append("update SourceToCategoryMapping set ");
+		Map<String, String> asMap = asMap(t);
+		Set<String> keySet = asMap.keySet();
+		for (String key : keySet) {
+			upd.append(" `");
+			upd.append(key);
+			upd.append("` = ?,");
+		}
+		upd.delete(upd.length() - 1, upd.length());
+		upd.append(" where username = '");
+		upd.append(asMap.get("username"));
+		upd.append("'");
+		Connection conn = MongoConnect.getConnection();
+		PreparedStatement pstmt = conn.prepareStatement(upd.toString());
+		int i = 0;
+		for (String key : keySet) {
+			pstmt.setString(++i, asMap.get(key));
+		}
+		pstmt.executeUpdate();
+
+		List<UserInformation> users = query("select * from User where jsondId = '"
+				+ asMap.get("jsondId") + "'");
+		if (users.size() == 1) {
+			log.dLog("用户[" + t.getUsername() + "]属性更新成功!");
+			return users.get(0);
+		} else if (users.size() > 1) {
+			log.eLog("用户[" + t.getUsername() + "]不唯一");
+			throw new Exception("用户[" + t.getUsername() + "]不唯一");
+		} else {
+			log.eLog("用户[" + t.getUsername() + "]不存在");
+			throw new Exception("用户[" + t.getUsername() + "]不存在");
+		}
+	}
+
+	public List<UserInformation> query(String sql) {
+		return query(sql, null);
+	}
+
+	public List<UserInformation> query(String sql,
+			Map<String, UserCategory> uCateMap) {
+		List<UserInformation> ret = null;
+		ResultSet resultSet = null;
+		try {
+			Connection conn = MongoConnect.getConnection();
+			Statement stmt = conn.createStatement();
+			resultSet = stmt.executeQuery(sql);
+			ret = new ArrayList<UserInformation>();
+			while (resultSet.next()) {
+				ResultSetMetaData metaData = resultSet.getMetaData();
+				int count = metaData.getColumnCount();
+				Map<String, String> data = new HashMap<String, String>();
+				for (int i = 1; i <= count; i++) {
+					String key = metaData.getColumnLabel(i);
+					String value = resultSet.getString(key);
+					data.put(key, value);
+				}
+				ret.add(nodeToObject(data, uCateMap));
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			if (resultSet != null) {
+				try {
+					resultSet.close();
+				} catch (SQLException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		return ret;
+	}
+
+	private Map<String, String> asMap(UserInformation uInfo) {
+		Map<String, String> ret = new HashMap<String, String>();
+		ret.put("jsonId", getJsonId(uInfo));
+		ret.put("username", uInfo.getUsername());
+		ret.put("password", uInfo.getPassword());
+		ret.put("categoryId", uInfo.getCategoryId());
+		ret.put("createTime", uInfo.getCreateTime() + "");
+		ret.put("updateTime", uInfo.getUpdateTime() + "");
+		ret.put("phone", uInfo.getPhone());
+		ret.put("emial", uInfo.getEmail());
+		return ret;
+	}
+
+	private UserInformation nodeToObject(Map<String, String> data,
+			Map<String, UserCategory> uCateMap) {
+		UserInformation uInfo = new UserInformation();
+		uInfo.setUsername(data.get("username"));
+		uInfo.setPassword(data.get("password"));
+		uInfo.setPhone(data.get("phone"));
+		uInfo.setEmail(data.get("email"));
+		uInfo.setCreateTime(Long.parseLong(data.get("createTime")));
+		uInfo.setUpdateTime(Long.parseLong(data.get("updateTime")));
+		uInfo.setCategoryId(data.get("categoryId"));
+		UserCategory uCate = null;
+		if (uCateMap != null) {
+			uCate = uCateMap.get(data.get("categoryId"));
+		}
+		if (uCate == null) {
+			try {
+				uCate = userCateStorage.getById(data.get("categoryId"));
+			} catch (Exception e) {
+			}
+		}
+		uInfo.setCategory(uCate);
+		return uInfo;
+	}
+
+	/**
+	 * 获取联合主键
+	 * 
+	 * @param info
+	 * @return
+	 */
+	private String getJsonId(UserInformation info) {
+		net.sf.json.JSONArray ja = new net.sf.json.JSONArray();
+		ja.add(info.getCategoryId());
+		ja.add(info.getUsername());
+		String jsonId = HexString.encode(ja.toString());
+		return jsonId;
+	}
+
+	private String getJsonId(String cateId, String userId) {
+		net.sf.json.JSONArray ja = new net.sf.json.JSONArray();
+		ja.add(cateId);
+		ja.add(userId);
+		String jsonId = HexString.encode(ja.toString());
+		return jsonId;
+	}
+}

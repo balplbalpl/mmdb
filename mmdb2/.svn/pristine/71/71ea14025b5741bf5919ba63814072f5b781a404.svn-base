@@ -1,0 +1,36 @@
+<div class="modal-header">
+	<h3 class="modal-title">设置快捷键</h3>
+</div>
+
+<div class="modal-body">
+	<div class="form-inline clearfix">
+		<div class="form-group col-md-6">
+			<label class="col-md-3">keyMaps</label>
+			<select class="form-control col-md-9" ng-model="theme" ng-options="theme.name for theme in themes" ng-change="setTheme();">
+			</select>
+		</div>
+		<div class="form-group col-md-6">
+			<button type="button" class="btn btn-success mr10" ng-click="copy();"><i class="fa fa-files-o">&nbsp</i>copy</button>
+			<button type="button" class="btn btn-info mr10" ng-click="reset();"><i class="fa fa-undo">&nbsp</i>reset</button>
+			<button type="button" class="btn btn-danger mr10" ng-click="delete();"><i class="fa fa-trash-o">&nbsp</i>delete</button>
+		</div>
+	</div>
+	<hr>
+	<div class="keymapBox">
+		<table>
+			<tr ng-repeat="(index,i) in keymapList" ng-class="{ 'active': $index == selectedIndex }" ng-click="setSelected()">
+				<td>
+					<div>{{i.fn}}</div>
+					<div ng-dblclick="showSetBox();" ng-show="index != keyShow">{{i.key}}</div>
+					<div class="setBox" ng-show="index == keyShow"><input type="text" ng-model="i.key" ng-keydown="checkKeys($event,i);"><span class="notcie">{{i.notice}}</span> </div>
+				</td>
+			</tr>
+		</table>
+	</div>
+
+</div>
+
+<div class="modal-footer">
+	<button class="btn btn-warning" ng-click="$modal.close()">取消</button>
+	<button class="btn btn-primary" ng-click="ok()">确定</button>
+</div>

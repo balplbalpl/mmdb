@@ -1,0 +1,335 @@
+(function(graph, self){
+
+	'use strict';
+
+	self.graphs = [];
+	self.defaultShowTimeline = false;
+	self.isShowLayerLine = false;
+	self.ciTables = [];
+
+	graph.onload = function(){
+		var result, o;
+
+		self.viewMap = {};
+		self.webglContainer = $('#main');
+		self.top = $('#top');
+		self.$pieParent = $('#ci-pie');
+
+		$(self.webglContainer).height($(window).height() - self.top.height());
+
+		self.viewid = decodeURIComponent(urlParams.view);
+		result = graph.api.getPortfolio(self.viewid);
+
+		if(graph.utils.isTrueRet(result)){
+			o = JSON.parse(result.data.content);
+			o.d3setting.$container = self.webglContainer;
+			o.d3setting.layerCount = o.d3setting.rows;
+			o.d3setting.layerItemCount = o.d3setting.cols;
+			self.start3d(o.d3setting);
+		}else{
+			graph.utils.alert(result.message);
+		}
+
+		self.initBtn();
+		self.event();
+		self.initGraph();
+	};
+
+	self.initBtn = function(){
+		var $timelineBtn = $('#displayTimeline'),
+			$eventBtn = $('#displayEvent'),
+			$displayLayerRelationBtn = $('#displayLayerRelation'),
+			$displayPieBtn = $('#displayPie');
+
+		$displayLayerRelationBtn.click(function(){
+			self.isShowLayerLine = !self.isShowLayerLine;
+
+			if(self.isShowLayerLine){
+				self.universe.showLayerLine();
+				$displayLayerRelationBtn.html('关闭层间连线');
+			}else{
+				self.universe.hideLayerLine();
+				$displayLayerRelationBtn.html('显示层间连线');
+			}
+		});
+
+		$displayPieBtn.click(function(){
+			if(self.$pieParent.css('visibility') === 'hidden'){
+				self.$pieParent.css('visibility', 'visible');
+			}else{
+				self.$pieParent.css('visibility', 'hidden');
+			}
+		});
+
+		$timelineBtn.click(function(){
+			self.defaultShowTimeline = !self.defaultShowTimeline;
+			if(self.defaultShowTimeline){
+				self.universe.showTimeline();
+				$timelineBtn.html('关闭告警');
+			}else{
+				self.universe.closeTimeline();
+				$timelineBtn.html('显示告警');
+			}
+		});
+
+		$eventBtn.click(function(){
+			var $main = $('.ci-event');
+			if($main.length >= 1){
+				if(self.ciEvent){
+					self.ciEvent.remove();
+					self.ciEvent = null;
+				}
+
+				$main.remove();
+				$eventBtn.html('显示所有CI 事件/工单/告警/变更单 列表');
+			}else{
+				self.ciEvent = new graph.CiEvent({
+					ids: self.ids,
+					container: self.webglContainer.parent()[0]
+				});
+
+				$eventBtn.html('关闭所有CI 事件/工单/告警/变更单 列表');
+			}
+		});
+	};
+
+	self.initGraph = function(){
+		var id = graph.utils.randstr();
+		graph.utils.render('webgl/graph', {id: id}, function(html){
+			$(document.body).append(html);
+
+			self.$graphMain = $('#' + id);
+
+			self.$hideGraphBtn = $('#hideBtn');
+			self.$editGraphBtn = $('#editBtn');
+			self.$fullGraphBtn = $('#fullBtn');
+			self.$graphViewName = $('#graphViewName');
+			self.$graphContainer = $('#graphContainer');
+
+			self.$hideGraphBtn.click(function(){
+				self.$graphMain.css({left: '88888px'});
+			});
+
+			self.$editGraphBtn.click(function(){
+				if(self.currentViewid){
+					window.open('index.html?viewid=' + self.currentViewid);
+				}
+			});
+
+			self.$fullGraphBtn.click(function(){
+				if(self.currentViewid){
+					window.open('view.html?viewid=' + self.currentViewid);
+				}
+			});
+
+			self.editor = graph.utils.getEditor(self.$graphContainer[0]);
+
+			self.editor.graph.setEnabled(false);
+			self.$graphContainer[0].style.backgroundImage = null;
+			self.$graphContainer.find('svg')[0].style.backgroundColor = 'transparent';
+			self.$graphContainer.find('svg')[0].style.backgroundImage = null;
+		});
+	};
+
+	self.openGraph = function(viewid){
+		var result;
+
+		self.currentViewid = viewid;
+		result = graph.api.getView(viewid);
+
+		if(graph.utils.isTrueRet(result)){
+			graph.utils.openXml(self.editor, result.data.xml);
+			self.$graphContainer[0].style.backgroundImage = null;
+			self.$graphContainer.find('svg')[0].style.backgroundColor = 'transparent';
+			self.$graphContainer.find('svg')[0].style.backgroundImage = null;
+			self.$graphViewName.html(result.data.name);
+			self.$graphMain.css({left: '10px'});
+		}else{
+			graph.utils.alert(result.message);
+		}
+	};
+
+	self.event = function(){
+		graph.event.reg(graph.DEFINE_EVENT.WEBGL_LAYER_TEXT_MOUSE_CLICK, function(evt){
+			self.openGraph(evt.viewid);
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.WEBGL_LAYER_NODE_MOUSE_CLICK, function(ev){
+			if(ev.ci && graph.utils.isCiCell(ev.ci)){
+				new graph.CiInfo({
+					id: graph.utils.getCiIdByCell(ev.ci),
+					container: self.webglContainer[0],
+					startTime: self.startTime,
+					endTime: self.endTime,
+					ciIds: self.universe.getRelationCiByNodeId(ev.mesh.id)
+				});
+			}
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.CI_INFO_CLOSE, function(){
+			self.universe.removeHighlightSelected();
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.TIMELINE_POINT_CLICK, function(ev){
+			var now;
+
+			if(ev.time === 'current'){
+				self.startTime = graph.utils.unixToDatetime((new Date).getTime());
+				self.endTime = null;
+			}else{
+				self.startTime = ev.time;
+				now = graph.utils.datetimeToUnix(ev.time) * 1000;
+				self.endTime = graph.utils.unixToDatetime(now + 60 * 1000 * 5);
+			}
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.CIEVENT_SHOW, function(ev){
+			var height = self.webglContainer.outerHeight();
+			self.webglContainer.height(height - ev.containerHeight);
+
+			if(self.universe.timeline){
+				self.webglContainer.parent().append(self.universe.timeline.mainElement);
+			}
+
+			ev.self.alertRows(self.ciTables);
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.CIEVENT_HIDE, function(ev){
+			var height = self.webglContainer.outerHeight();
+			self.webglContainer.height(height + ev.oriHeight);
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.CIEVENT_TR_CLICK, function(ev){
+			self.universe.removeHighlightSelected();
+			$.each(self.universe.getCiMesh(ev.id), function(){
+				var item = this;
+				self.universe.highlightNodeId(item.id);
+			});
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.TIMELINE_SHOW, function(ev){
+			var height = self.webglContainer.outerHeight();
+			self.webglContainer.height(height - ev.containerHeight);
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.TIMELINE_RESIZE, function(ev){
+			var height;
+			if(ev.height > ev.oriHeight){
+				height = self.webglContainer.outerHeight() - (ev.height - ev.oriHeight);
+			}else{
+				height = self.webglContainer.outerHeight() + (ev.oriHeight - ev.height);
+			}
+			self.webglContainer.height(height);
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.TIMELINE_POINT_CLICK, function(ev){
+			graph.utils.showCiAlarmPie('#pie', ev.data);
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.TIMELINE_ONLOAD, function(ev){
+			graph.utils.showCiAlarmPie('#pie', ev.data);
+		});
+
+		graph.event.reg(graph.DEFINE_EVENT.CIS_ALARM_CHANGE, function(ev){
+			graph.utils.showCiAlarmPie('#pie', ev.data);
+			self.ciTables = ev.changeList;
+
+			if(self.ciEvent){
+				self.ciEvent.alertRows(ev.changeList);
+			}
+		});
+	};
+
+	self.start3d = function(o){
+		var result, views = [], checkViewsOne = {};
+
+		$.each(o.layers, function(){
+			var layer = this;
+			$.each(layer, function(){
+				var item = this;
+				if(item && item.viewid && !checkViewsOne[item.viewid]){
+					checkViewsOne[item.viewid] = true;
+					views.push(item.viewid);
+					if(item.floorBgColor){
+						item.floorBgColor = window.parseInt(item.floorBgColor.substr(1), 16);
+					}
+				}
+			});
+		});
+
+		result = graph.api.getViews(views);
+		if(graph.utils.isTrueRet(result)){
+			self.viewMap = result.data;
+		}else{
+			graph.utils.alert(result);
+		}
+
+		$.each(o.layers, function(){
+			var layer = this;
+			$.each(layer, function(){
+				var item = this, data, pos;
+
+				if(item && item.viewid && self.viewMap[item.viewid]){
+					data = self.viewMap[item.viewid];
+					item.name = data.name;
+					pos = JSON.parse(data.svg);
+					item.nodes = pos.nodes;
+					item.containers = pos.containers;
+					item.edges = pos.edges;
+					item.graphWidth = pos.graphWidth;
+					item.graphHeight = pos.graphHeight;
+
+					self.graphs.push(item);
+				}
+			});
+		});
+
+
+		o.relation = self.getRelation(self.graphs);
+		self.universe = new graph.Universe(o);
+		self.webglContainer.find('canvas').css({
+			height: '100%',
+			width: '100%'
+		});
+	};
+
+	self.getRelation = function(views){
+		var ids = [], checked = {}, result, relation = [];
+
+		$.each(views, function(){
+			var _this = this;
+
+			$.each(_this.nodes, function(){
+				var _this = this;
+				if(graph.utils.isCiCell(_this) && !checked[_this.id]){
+					checked[_this.id] = true;
+					ids.push(graph.utils.getCiIdByCell(_this));
+				}
+			});
+
+			$.each(_this.containers, function(){
+				var _this = this;
+				if(graph.utils.isCiCell(_this) && !checked[_this.id]){
+					checked[_this.id] = true;
+					ids.push(graph.utils.getCiIdByCell(_this));
+				}
+			});
+		});
+
+		self.ids = ids;
+		result = graph.api.getRelationCiByIds(ids);
+
+		if(graph.utils.isTrueRet(result)){
+			$.each(result.data, function(){
+				var arr = this.split('_');
+				relation.push({
+					source: graph.DEFINE_CI.GRAPH_PREFIX + arr[0],
+					target: graph.DEFINE_CI.GRAPH_PREFIX + arr[2]
+				});
+			});
+		}
+
+		return relation;
+	};
+
+})(nameSpace.reg('graph'), nameSpace.reg('graph.webgl'));

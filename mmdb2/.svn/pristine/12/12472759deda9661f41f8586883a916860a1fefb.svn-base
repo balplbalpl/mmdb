@@ -1,0 +1,39 @@
+package com.mmdb.model.security.storage;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.mmdb.core.framework.neo4j.storage.NodeStorage;
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.security.Role;
+
+/**
+ * 角色存储
+ *
+ * @author XIE
+ */
+@Service
+public class RoleStorage extends NodeStorage<Role> {
+    private Log log = LogFactory.getLogger("RoleStorage");
+
+    /**
+     * 根据id获取角色
+     *
+     * @param id 角色id
+     * @return
+     * @throws Exception
+     */
+    public Role getById(String id) throws Exception {
+        List<Role> list = this.getByProperty("id", id);
+        if (list.size() == 1) {
+            return list.get(0);
+        } else if (list.size() > 1) {
+            log.eLog("Role[" + id + "]not unique.");
+            throw new Exception("Role[" + id + "]not unique.");
+        } else {
+            return null;
+        }
+    }
+}

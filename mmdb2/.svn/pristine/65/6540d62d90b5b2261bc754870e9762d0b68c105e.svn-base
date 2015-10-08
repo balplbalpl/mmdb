@@ -1,0 +1,185 @@
+
+
+<div class="h100">
+	<tabset class="h100">
+		<tab select="alertMe()">
+			<tab-heading>
+				相关视图
+			</tab-heading>
+
+			<div>
+
+				<div class="search-views clear mt5 ml5 mr5 mb5">
+
+
+					<div class="search-views-item" ng-repeat="item in views">
+
+						<img ng-src="{{ staticUrl(item.imageUrl) }}" style="opacity: 0;" />
+
+						<div>
+							<img class="img img-rounded" ng-src="{{ staticUrl(item.imageUrl) }}" />
+
+							<div class="search-views-footer">
+								<div class="search-views-text">
+									{{item.categoryName}} <span class="search-views-divider">|</span> {{item.name}}
+								</div>
+
+								<div class="search-views-expand">
+									<i class="fa fa-expand"></i>
+								</div>
+							</div>
+						</div>
+					</div>
+
+					<div ng-show="!views.length" class="alert alert-warning mt20 mr20 ml20 mb20">
+						<i class="fa fa-exclamation-circle"></i> 没有搜索到任何视图!
+					</div>
+				</div>
+			</div>
+
+		</tab>
+
+		<tab select="alertMe()">
+			<tab-heading>
+				 相关CI
+			</tab-heading>
+
+			<div>
+
+				<div class="row mt20">
+					<div class="col-md-5 ml10">
+						每页显示
+						<select class="pd5">
+							<option>10</option>
+							<option>20</option>
+							<option>30</option>
+						</select>
+						 条, 一共 {{tableParams.total()}} 条记录
+					</div>
+					<div class="col-md-5 text-right input-search-ci-div">
+						<span>在结果中查询</span> <input type="text" placeholder="在结果中查询" />
+					</div>
+				</div>
+
+
+				<div class="search-ci mt20 psrl" ng-scroll="">
+					<div class="psrl pl10 pr10">
+					<table class="table table-bordered" ng-table="tableParams">
+						<tr class="text-left" ng-repeat-start="row in $data" ng-class="{'alert-warning': row._expand}">
+							<td data-title="''" style="width: 20px;">
+								<button ng-click="row._expand = !row._expand" class="btn btn-link btn-xs noselect">
+									<i class="fa fa-plus" ng-show="!row._expand"></i>
+									<i class="fa fa-minus" ng-show="row._expand"></i>
+								</button>
+							</td>
+							<td data-title="'名称'">{{ row.config.name }}</td>
+							<td data-title="'分类'">{{ row.config.categoryName }}</td>
+							<td data-title="'图标'"><img ng-src="{{staticUrl(row.config.icon)}}" height="20" /></td>
+
+						</tr>
+
+						<tr class="text-center" ng-repeat-end ng-show="row._expand">
+							<td colspan="100">
+
+								<tabset class="alert-warning">
+									<tab heading="CI配置信息">
+										<!--<div class="row mt10 ml10 mb10">-->
+											<!--<div class="col-md-2" ng-repeat="(key, value) in row.config.data">-->
+												<!--{{key}} : <span class="text text-primary">{{value}}</span>-->
+											<!--</div>-->
+										<!--</div>-->
+										<div class="mt20 mb20 result-ci-icon">
+											<img src="{{staticUrl(row.config.icon)}}" class="col-md-12"/>
+										</div>
+										<div class="mt20 mb20 result-ci-config">
+											<div ng-repeat="(key, value) in row.config.data">
+												<div class="result-ci-config-data">
+													<div class="mb30">
+														<span class="col-md-4">{{key}}</span>
+														<span class="col-md-8">{{value}}</span>
+													</div>
+												</div>
+											</div>
+										</div>
+									</tab>
+
+									<tab heading="事件">
+										<div class="row mt10 ml10 mb10">
+											<table class="table " style="background: transparent; text-align: left">
+												<thead>
+												<tr>
+													<th ng-repeat="item in row.event.head">{{item}}</th>
+												</tr>
+												</thead>
+
+												<tbody>
+												<tr ng-repeat="item in row.event.row">
+													<td ng-repeat="key in row.event.head">{{item[key]}}</td>
+												</tr>
+
+												<tr ng-show="!row.event.row.length">
+													<td colspan="10000" class="result-ci-alert-td">
+														<div class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有数据</div>
+													</td>
+												</tr>
+												</tbody>
+											</table>
+										</div>
+
+									</tab>
+
+									<tab heading="监控">
+										<div class="row mt10 ml10 mb10">
+											<table class="table" style="background: transparent;text-align:left;">
+												<thead>
+												<tr>
+													<th ng-repeat="item in row.perf.head">{{item}}</th>
+												</tr>
+												</thead>
+
+												<tbody>
+												<tr ng-repeat="item in row.perf.row">
+													<td ng-repeat="key in row.perf.head">{{item[key]}}</td>
+												</tr>
+
+												<tr ng-show="!row.perf.row.length">
+													<td colspan="10000" class="result-ci-alert-td">
+														<div class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有数据</div>
+													</td>
+												</tr>
+												</tbody>
+											</table>
+										</div>
+									</tab>
+
+									<tab heading="相关视图" select="showCiViews(row)">
+										<div ng-show="row.ciViews.length" class="result-ci-view psrl w100" id="{{row.config.id}}" w100>
+
+										</div>
+										<div ng-show="!row.ciViews.length" class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有数据</div>
+									</tab>
+								</tabset>
+
+							</td>
+						</tr>
+
+						<tr ng-show="!$data.length">
+							<td colspan="100">
+								<div class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有搜索到任何数据</div>
+							</td>
+						</tr>
+					</table>
+					</div>
+				</div>
+			</div>
+
+		</tab>
+	</tabset>
+
+</div>
+
+
+
+
+
+

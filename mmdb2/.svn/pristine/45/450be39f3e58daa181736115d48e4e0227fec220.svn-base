@@ -1,0 +1,64 @@
+package com.mmdb.model.task;
+
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.DisposableBean;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
+import org.springframework.stereotype.Component;
+
+import com.mmdb.service.task.ITaskService;
+
+/**
+ * 启动 定时器
+ *
+ * @author XIE
+ */
+@Component
+public class RunTimer implements ApplicationContextAware, DisposableBean {
+    private static Log log = LogFactory.getLogger("RunTimer");
+    @Autowired
+    private ITaskService taskService;
+
+    @Override
+    public void destroy() throws Exception {
+        QuartzManager.shutdownJobs();
+    }
+
+    @Override
+    public void setApplicationContext(ApplicationContext arg0) throws BeansException {
+/*        try {
+            List<Task> ts = taskService.getAll();
+            for (Task t : ts) {
+                if (t.getOpen()) {
+                    Map<String, String> tm = t.getTiming();
+                    String type = tm.get("触发频率");
+                    if (type.equals("one")) {
+                        String time = tm.get("time");
+                        SimpleDateFormat sd = new SimpleDateFormat("yyyy-MM-dd HH:mm");
+                        Date d1 = sd.parse(time);
+                        Date d2 = new Date();
+                        if (d1.getTime() > d2.getTime()) {
+                            QuartzManager.addJob(t.getName(), TaskJob.class.getName(), tm.get("runtime"));
+                        } else {
+                            log.dLog("任务[" + t.getName() + "]已过期");
+                        }
+                    } else {
+                        QuartzManager.addJob(t.getName(), TaskJob.class.getName(), tm.get("runtime"));
+                    }
+                }
+            }
+            QuartzManager.startJobs();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }*/
+    }
+
+}

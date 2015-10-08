@@ -1,0 +1,152 @@
+(function(graph){
+
+    'use strict';
+
+	var F = null;
+
+    graph.jstreeContextMenu = function(options){
+		return new F(options).getItems();
+	};
+
+	F = function(options){
+		this.options = options;
+		this.jstree = options.container.jstree(true);
+		this.isView = !!options.node.original.view;
+		this.refreshTree = options.refreshTree;
+	};
+
+	F.prototype.getItems = function(){
+		var _this = this,
+			o = {};
+
+		if(_this.isView){
+			o.renameView = _this.renameView();
+			o.deleteView = _this.deleteView();
+		}else{
+			o.renameFold = _this.renameFold();
+			o.createFold = _this.createFold();
+			o.deleteFold = _this.deleteFold();
+		}
+		return o;
+	};
+
+	F.prototype.reg = function(label, action){
+		return {
+			label: label,
+			action: action
+		};
+	};
+
+    /* jshint ignore:start */
+	F.prototype.deleteView = function(){
+		var _this = this,
+			title = '删除视图';
+
+		return _this.reg(title, function(){
+			graph.utils.confirm(title, function(){
+				var result;
+				result = _this.options.viewDelete(_this.options.node.original.id);
+				if (graph.utils.isTrueRet(result)) {
+					_this.jstree.delete_node([_this.options.node.original.id]);
+				}
+				graph.utils.alert(result.message);
+			});
+		});
+	};
+    /* jshint ignore:end */
+
+	F.prototype.renameView = function(){
+		var _this = this;
+		return _this.reg('重命名视图', function(){
+			var html;
+			html = graph.utils.render('view/rename.html', {value: _this.options.node.original.text});
+			graph.dialog('重命名', html, function (container, dialog) {
+				var newName,
+					result = null;
+				newName = $.trim(container.find('input').val());
+				if(newName){
+					result = _this.options.viewRename(_this.options.node.original.id, newName);
+					if(graph.utils.isTrueRet(result)){
+
+                        /* jshint ignore:start */
+						_this.jstree.set_text(_this.options.node.original.id, newName);
+                        /* jshint ignore:end */
+
+						dialog.hide();
+
+                        if(_this.refreshTree){
+                            _this.refreshTree();
+                        }
+					}
+					graph.utils.alert(result.message);
+
+				}else{
+					graph.utils.alert('名称不能为空');
+				}
+			});
+		});
+	};
+
+	F.prototype.createFold = function(){
+		var _this = this;
+		return _this.reg('创建目录', function(){
+			_this.options.foldCreate(_this.options.node.original.id);
+		});
+	};
+
+	F.prototype.renameFold = function(){
+		var _this = this;
+		return _this.reg('重命名目录', function(){
+			var html;
+			html = graph.utils.render('view/rename.html', {value: _this.options.node.original.text});
+			graph.dialog('重命名目录', html, function (container, dialog) {
+				var newName,
+					result = null;
+
+				newName = $.trim(container.find('input').val());
+				if(newName){
+					result = _this.options.foldRename(_this.options.node.original.id, newName);
+
+					if(graph.utils.isTrueRet(result)){
+
+                        /* jshint ignore:start */
+						_this.jstree.set_text(_this.options.node.original.id, newName);
+                        /* jshint ignore:end */
+
+						dialog.hide();
+
+                        if(_this.refreshTree){
+                            _this.refreshTree();
+                        }
+					}
+
+					graph.utils.alert(result.message);
+				}else{
+					graph.utils.alert('名称不能为空');
+				}
+			});
+		});
+	};
+
+	F.prototype.deleteFold = function(){
+		var _this = this,
+			title = '删除目录';
+
+		return _this.reg(title, function(){
+			var result;
+
+			graph.utils.confirm(title, function(){
+				result = _this.options.foldDelete(_this.options.node.original.id);
+
+				/* jshint ignore:start */
+				if (graph.utils.isTrueRet(result)) {
+					_this.jstree.delete_node([_this.options.node.original.id]);
+				}
+				/* jshint ignore:end */
+
+				graph.utils.alert(result.message);
+			});
+		});
+	};
+
+})(nameSpace.reg('graph'));

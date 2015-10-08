@@ -1,0 +1,211 @@
+package com.mmdb.model.icon.storage;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.index.Index;
+import org.neo4j.shell.util.json.JSONObject;
+import org.springframework.stereotype.Component;
+
+import com.mmdb.core.framework.neo4j.index.NodeIndex;
+import com.mmdb.core.framework.neo4j.storage.NodeStorage;
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.db.neo4jdb.Neo4jDao;
+import com.mmdb.model.icon.Icon;
+import com.mmdb.model.icon.IconLibrary;
+import com.mmdb.util.Neo4jStringUtils;
+
+/**
+ * 图标库存储
+ *
+ * @author XIE
+ */
+@Component
+public class IconLibrayStorage extends NodeStorage<IconLibrary> {
+    private Log log = LogFactory.getLogger("IconLibrayStroage");
+
+    /**
+     * 获取图标
+     *
+     * @param id
+     * @return
+     * @throws Exception
+     */
+    public IconLibrary getIconById(String id) throws Exception {
+    	String cql = "match (n:IconLibrary {id:'"+id+"'}) return n";
+		List<JSONObject> list = Neo4jDao.getDataMap(cql);
+		if (list.size() == 1) {
+			JSONObject js = list.get(0);
+			JSONObject data = (JSONObject)js.get("data");
+			Long neo4jid = js.getLong("id");
+			IconLibrary i = new IconLibrary(data.getString("icon"), data.getString("model"));
+			i.setNeo4jid(neo4jid);
+			return i;
+		} else if (list.size() > 1) {
+            log.eLog("图标[" + id + "]不唯一");
+            throw new Exception("图标[" + id + "]不唯一");
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * [批量]删除图标
+     *
+     * @param icons 图标
+     * @return
+     * @throws Exception
+     */
+    public void deletes(List<IconLibrary> icons) throws Exception {
+        for (IconLibrary icon : icons) {
+            this.delete(icon);
+        }
+    }
+
+	/**
+	 * 获取总数
+	 * 
+	 * */
+	public int count() throws Exception {
+		String cql = "match (n:IconLibrary) return  count(*)";
+		int i = (int)Neo4jDao.getDataLong(cql);
+		return i;
+	}
+
+	/**
+	 * 删除单个图标
+	 * @param t IconLibrary
+	 * 
+	 * */
+	public void delete(IconLibrary t) throws Exception {
+		String cql = "match (n:IconLibrary {icon:'"+t.getIcon()+"'}) delete n";
+		Neo4jDao.executeNoRest(cql);
+	}
+
+	/**
+	 * 批量删除图标
+	 * @param list List<IconLibrary> 
+	 * */
+	public void delete(List<IconLibrary> list) throws Exception {
+		for(IconLibrary lib:list){
+			this.delete(lib);
+		}
+	}
+
+	/**
+	 * 删除所有图标
+	 * 
+	 * */
+	public void deleteAll() throws Exception {
+		String cql = "match (n:IconLibrary) delete n";
+		Neo4jDao.executeNoRest(cql);
+	}
+
+	/**
+	 * 检查相应neo4jID的图标是否存在
+	 * @param nodeid Long
+	 * */
+	public boolean exists(Long nodeid) {
+		boolean flag = false;
+		String cql = "match (n:IconLibrary) where id(n)="+nodeid+" return n";
+		List<JSONObject> list = Neo4jDao.getDataMap(cql);
+		if(list.size()>0){
+			flag = true;
+		}
+		return flag;
+	}
+
+	/**
+	 * 获取所有图标
+	 * 
+	 * */
+	public List<IconLibrary> getAll() throws Exception {
+		String cql = "match (n:IconLibrary) return n";
+		List<JSONObject> jsData = Neo4jDao.getDataMap(cql);
+		List<IconLibrary> retList = new ArrayList<IconLibrary>();
+		for(JSONObject js:jsData){
+			JSONObject data = (JSONObject)js.get("data");
+			Long neo4jid = (Long)js.get("id");
+			IconLibrary i = new IconLibrary(data.getString("icon"), data.getString("model"));
+			i.setNeo4jid(neo4jid);
+			retList.add(i);
+		}
+		return retList;
+	}
+
+//	 
+//	public NodeIndex getIndex() {
+//		// TODO Auto-generated method stub
+//		return super.getIndex();
+//	}
+//
+//	 
+//	public Index<Node> getNodeIndexByClass(Class<?> cls)
+//			throws ClassNotFoundException {
+//		// TODO Auto-generated method stub
+//		return super.getNodeIndexByClass(cls);
+//	}
+//
+//	 
+//	public Index<Node> index() throws ClassNotFoundException {
+//		// TODO Auto-generated method stub
+//		return super.index();
+//	}
+//
+//	 
+//	public List<IconLibrary> query(Object query) throws Exception {
+//		// TODO Auto-generated method stub
+//		return super.query(query);
+//	}
+//
+//	 
+//	public List<IconLibrary> query(String exp) throws Exception {
+//		// TODO Auto-generated method stub
+//		return super.query(exp);
+//	}
+//
+//	 
+//	public List<IconLibrary> queryByProperty(String key, Object value)
+//			throws Exception {
+//		// TODO Auto-generated method stub
+//		return super.queryByProperty(key, value);
+//	}
+
+//	 
+//	public void setIndex(NodeIndex index) {
+//		// TODO Auto-generated method stub
+//		super.setIndex(index);
+//	}
+	
+	/**
+	 * 保存图标
+	 * @param t IconLibrary
+	 * */
+	public IconLibrary save(IconLibrary t) throws Exception {
+		String id = Neo4jStringUtils.cypherESC(t.getIcon());
+		String model = Neo4jStringUtils.cypherESC(t.getModel());
+		String cql = "merge (n:IconLibrary {icon:'"+id+"'}) set n.icon = '"+model+"' return id(n)";
+		long neo4jid = Neo4jDao.getDataLong(cql);
+		t.setNeo4jid(neo4jid);
+		return t;
+	}
+
+
+	/**
+	 * 更新图标
+	 * @param t IconLibrary
+	 * 
+	 * */
+	public IconLibrary update(IconLibrary t) throws Exception {
+		String id = Neo4jStringUtils.cypherESC(t.getIcon());
+		String model = Neo4jStringUtils.cypherESC(t.getModel());
+		String cql = "match (n:IconLibrary {icon:'"+id+"'}) where id(n)="+t.getNeo4jid()+" set n.icon = '"+model+"' return id(n)";
+		return t;
+	}
+
+    
+    
+    
+}

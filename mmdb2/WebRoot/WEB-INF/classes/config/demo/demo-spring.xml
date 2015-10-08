@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:task="http://www.springframework.org/schema/task"
+	xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd
+		http://www.springframework.org/schema/context http://www.springframework.org/schema/context/spring-context-3.0.xsd
+		http://www.springframework.org/schema/task http://www.springframework.org/schema/task/spring-task-3.0.xsd">
+
+	<bean id="configproperties"
+		class="org.springframework.beans.factory.config.PropertiesFactoryBean">
+		<property name="locations">
+			<list>
+				<value>classpath:config/demo/demo-global.properties
+				</value>
+			</list>
+		</property>
+	</bean>
+	<bean id="propertyConfigurer"
+		class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="properties" ref="configproperties" />
+	</bean>
+
+	<bean class="com.mmdb.core.utils.SpringContextUtil"></bean>
+
+	<context:annotation-config />
+	<context:spring-configured />
+
+	<bean id="Neo4jConnect" class="com.mmdb.model.db.neo4jdb.Neo4jConnect"
+		init-method="init">
+		<property name="neoUsername" value="${neo4j.username}" />
+		<property name="neoPassword" value="${neo4j.password}" />
+		<property name="neoIp" value="${neo4j.ip}" />
+		<property name="neoPort" value="${neo4j.port}" />
+	</bean>
+
+	<context:component-scan base-package="com.mmdb" />
+	<context:component-scan base-package="com.uinv.common" />
+
+	<bean id="global" class="com.mmdb.common.Global" init-method="init" >
+		<property name="roleService" ref="roleService"></property>
+		<property name="userService" ref="userService"></property>
+		<property name="vInfoService" ref="viewInfoService"></property>
+		<property name="svgService" ref="imageService"></property>
+	</bean>
+
+
+</beans>

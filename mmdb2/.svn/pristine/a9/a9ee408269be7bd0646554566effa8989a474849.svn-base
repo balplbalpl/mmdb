@@ -1,0 +1,191 @@
+<div>
+
+	<div class="main-box-right-content-right">
+		<div class="main-box-right-content-right-content box-border box-shadow" ng-class="{'no-margin-left': LAYOUT.collapsedSidebar}">
+
+			<!-- 画布上方工具条 -->
+			<div class="main-box-content-heading">
+
+				<div graph-toolbar="toolbarParams"></div>
+
+				<div class="main-box-content-heading-tool">
+					<button class="btn btn-info btn-xs" ng-click="infoParams.showFlag = !infoParams.showFlag">
+						<i class="fa fa-bars"></i>
+					</button>
+				</div>
+			</div>
+
+
+			<div class="main-box-content-body">
+
+				<div class="main-box-content-panel-container">
+					<div class="main-box-content-panel-container-body" ng-class="{'no-margin-right': !infoParams.showFlag}">
+						<div class="graph">
+							<div class="h100 w100" id="graph" tabindex="-1" ngf-accept="'*.xml'" ngf-drop ngf-change="openXml($files)"></div>
+							<div graph-table="graphTableParams" class="graph-ci-table" ng-show="params.showFlag"></div>
+							<div class="graph-outline" id="graph-outline"></div>
+						</div>
+					</div>
+				</div>
+
+				<div class="main-box-content-panel-right" ng-show="infoParams.showFlag">
+					<div graph-info="infoParams" class="h100"></div>
+				</div>
+
+			</div>
+		</div>
+	</div>
+
+	<div class="main-box-right-content-left" ng-show="!LAYOUT.collapsedSidebar">
+		<tabset justified="true">
+			<tab heading="图标">
+
+				<div class="pd10">
+					<accordion id="category_icon">
+						<accordion-group heading="CI分类" ng-init="status[0].open=true;" is-open="status[0].open" ng-class="{'accordion-open': status[0].open, 'accordion-close': !status[0].open}">
+							<div class="h100 psrl" ng-scroll="">
+								<div ng-repeat-start="(index, item) in cates" class="drag-box" ng-repeat-done="initCate()">
+									<div class="drag-box-header noselect" ng-click="item._expand = !item._expand">
+										<h6 class="drag-box-title">
+											{{item.label}}
+										</h6>
+
+									<span class="drag-box-tool">
+										<i class="fa fa-angle-left" ng-if="item._expand"></i>
+										<i class="fa fa-angle-down" ng-if="!item._expand"></i>
+									</span>
+									</div>
+
+								<div class="drag-box-list" ng-show="!item._expand">
+									<div class="drag-box-item" ng-repeat="childItem in item.items" data-icon="{{childItem.icon}}" data-name="{{childItem.name}}"></div>
+								</div>
+							</div>
+
+								<hr ng-repeat-end ng-if="cates.length - 1 > index" />
+							</div>
+
+						</accordion-group>
+
+						<accordion-group heading="自定义图标" ng-click="initOwnIcon();"  ng-init="status[1].open;" is-open="status[1].open" ng-class="{'accordion-open': status[1].open, 'accordion-close': !status[1].open}">
+
+							<div class="mb10">
+								<input class="form-control" placeholder="like" ng-model="icon.like" />
+							</div>
+
+							<div id="own_icon" class="drag-box mb10"
+								 ngf-select="false"
+								 ngf-drop
+								 ngf-accept="'image/*,.svg'"
+								 ngf-change="uploadIcon($files)">
+								<div class="drag-box-list">
+									<div class="drag-box-item" ng-repeat="itemIcon in icons" data-icon="{{preStatic(itemIcon.url)}}"></div>
+								</div>
+
+								<div ng-show="!icons.length" class="alert alert-warning">
+									<p>您可以拖拽图片到这里试一试</p>
+								</div>
+							</div>
+
+							<div ng-if="icon.total > icon.pageSize" class="mb10">
+								<pager items-per-page="icon.pageSize" ng-change="reloadIcon()" total-items="icon.total" ng-model="icon.page"></pager>
+							</div>
+
+							<div class="alert alert-success" style="cursor: pointer" ng-init="isCollapsedUploadIcon = true;"
+								 collapse="isCollapsedUploadIcon"
+								 ngf-select="true"
+								 ngf-drop
+								 ngf-accept="'image/*,.svg'"
+								 ngf-change="uploadIcon($files)">
+
+								<p>点这里上传文件</p>
+								<p>或者拖拽文件到这里</p>
+
+								<progressbar max="100" type="success" ng-show="showProgressbar">
+									<span style="color:black; white-space: nowrap">
+										{{iconUploaProgressPercentage}} / 100
+									</span>
+								</progressbar>
+							</div>
+
+							<div class="graph-collapse1" ng-click="isCollapsedUploadIcon = !isCollapsedUploadIcon">
+								<i class="fa fa-angle-up" ng-if="!isCollapsedUploadIcon"></i>
+								<i class="fa fa-angle-down" ng-if="isCollapsedUploadIcon"></i>
+							</div>
+
+						</accordion-group>
+
+						<accordion-group heading="基础图标" ng-click="initBaseIcon();" ng-init="status[2].open;" is-open="status[2].open" ng-class="{'accordion-open': status[2].open, 'accordion-close': !status[2].open}">
+							<div id="base_icon" class="base_icon"></div>
+						</accordion-group>
+					</accordion>
+				</div>
+
+			</tab>
+
+			<tab heading="配置信息" select="initConfig();">
+
+				<div class="form pd10">
+
+					<div collapse="isCollapsedConfigForm">
+						<div class="form-group mt10">
+							<select class="form-control"
+									ng-model="config.cate"
+									ng-options="item.name for item in selectCates">
+
+							</select>
+						</div>
+
+						<div class="form-group mt10" ng-show="config.cate">
+							<select class="form-control"
+									ng-options="item.name for item in config.cate.attributes"
+									ng-model="config.attr">
+							</select>
+						</div>
+
+						<div class="form-group mt10">
+							<div class="row">
+							<span class="col-md-8">
+								<input class="form-control" ng-model="config.like" placeholder="like" />
+							</span>
+
+							<span class="col-md-4">
+								<button class="btn btn-primary btn-block btn-form" ng-click="configSearch()">搜索</button>
+							</span>
+							</div>
+
+						</div>
+
+					</div>
+
+
+					<div class="graph-collapse1" ng-click="isCollapsedConfigForm = !isCollapsedConfigForm">
+						<i class="fa fa-angle-up" ng-if="!isCollapsedConfigForm"></i>
+						<i class="fa fa-angle-down" ng-if="isCollapsedConfigForm"></i>
+					</div>
+
+					<div class="config-table" ng-show="isSearch">
+						<table class="table" ng-table="tableParams" id="config-table"
+							template-pagination="ngtable/pager">
+							<tr ng-repeat="row in $data" data-id="{{row.id}}">
+								<td width="30" header="'ngtable/checkbox'">
+									<input type="checkbox" ng-model="checkboxes.items[row.id]">
+								</td>
+								<td data-title="'分类'"><div data-content="{{row.categoryName}}" data-placement="top" ng-mouseover="showPopover($event);" ng-mouseleave="hidePopover($event);">{{row.categoryName}}</div></td>
+								<td data-title="'CI名称'"><div data-content="{{row.name}}" data-placement="top" ng-mouseover="showPopover($event);" ng-mouseleave="hidePopover($event);">{{row.name}}</div></td>
+							</tr>
+
+							<tr ng-show="!$data.length">
+								<td colspan="100">
+									<div class="alert alert-warning">没有任何数据</div>
+								</td>
+							</tr>
+						</table>
+					</div>
+
+				</div>
+			</tab>
+
+		</tabset>
+	</div>
+
+</div>

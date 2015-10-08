@@ -1,0 +1,208 @@
+package com.mmdb.rest.subscription;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.util.List;
+
+import net.sf.json.JSONObject;
+
+import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.Header;
+import org.restlet.data.Status;
+import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Post;
+import org.restlet.resource.ServerResource;
+import org.restlet.util.Series;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.SpringContextUtil;
+import com.mmdb.model.bean.User;
+import com.mmdb.model.info.ViewInformation;
+import com.mmdb.service.info.IViewInfoService;
+import com.mmdb.service.relation.IViewViewProtfolioRelService;
+import com.mmdb.service.role.IUserService;
+import com.mmdb.service.subscription.ISubscriptionService;
+import com.mmdb.service.subscription.ISubscriptionViewPortfolioService;
+import com.mmdb.util.des.Des;
+
+/**
+ * 用于管理订阅,可以订阅视图和组合视图
+ * 
+ * @author xiongjian
+ * @path /subscription/view
+ */
+public class SubscriptionViewRest extends ServerResource {
+	private Log log = LogFactory.getLogger("SubscriptionRest");
+	private IUserService userService;
+	private IViewInfoService vInfoService;
+	private ISubscriptionService subService;
+	private IViewViewProtfolioRelService viewRelToProtService;
+	private ISubscriptionViewPortfolioService subViewPortService;
+
+	@Override
+	public void init(Context context, Request request, Response response) {
+		super.init(context, request, response);
+		userService = (IUserService) SpringContextUtil.getApplicationContext()
+				.getBean("userService");
+		vInfoService = (IViewInfoService) SpringContextUtil
+				.getApplicationContext().getBean("viewInfoService");
+		subService = (ISubscriptionService) SpringContextUtil
+				.getApplicationContext().getBean("subscriptionService");
+		viewRelToProtService = (IViewViewProtfolioRelService) SpringContextUtil
+				.getApplicationContext().getBean(
+						"viewViewProtfolioRelServiceImpl");
+		subViewPortService = (ISubscriptionViewPortfolioService) SpringContextUtil
+				.getApplicationContext().getBean(
+						"subscriptionViewPortfolioService");
+	}
+
+	@Post
+	public Representation postMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		// action
+		String param1 = (String) getRequestAttributes().get("param1");
+
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+			}
+		}
+
+		String operation = null;
+		try {
+			if("subViews".equals(param1)){
+				return getSubViewIds();
+			}
+			// 订阅视图
+			return subscriptionView(param1);
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "[" + operation + "]解析失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation getSubViewIds() {
+		JSONObject ret = new JSONObject();
+		try {
+			List<String> viewIds = subService.getViewBySubscriber(getUser().getLoginName());
+			ret.put("data", viewIds);
+			ret.put("message", "获取成功");
+		} catch (Exception e) {
+			getResponse().setStatus(new Status(600));
+			ret.put("message", e.getMessage());
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@Delete
+	public Representation delMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		// action
+		String param1 = (String) getRequestAttributes().get("param1");
+		// id
+		// String param2 = (String) getRequestAttributes().get("param2");
+
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+			}
+		}
+
+		String operation = null;
+		try {
+			// 订阅视图
+			return unsubscriptionView(param1);
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "[" + operation + "]解析失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	/**
+	 * 订阅视图
+	 * 
+	 * @return
+	 */
+	private Representation subscriptionView(String viewId) {
+		JSONObject ret = new JSONObject();
+		try {
+			String username = getUser().getLoginName();
+			List<String> viewids = subService.getViewBySubscriber(username);
+			if(viewids.contains(viewId)){
+				ret.put("message", "订阅成功");
+				return new JsonRepresentation(ret.toString());
+			}
+
+			ViewInformation vInfo = vInfoService.getById(viewId);
+			
+			subService.save(username, vInfo);
+			ret.put("message", "订阅成功");
+		} catch (Exception e) {
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+
+		return new JsonRepresentation(ret.toString());
+	}
+
+	/**
+	 * 
+	 * @param viewId
+	 * @return
+	 */
+	private Representation unsubscriptionView(String viewId) {
+		JSONObject ret = new JSONObject();
+		try {
+			User user = getUser();
+			// TODO 判断视图是否被组合视图使用,如果被使用则不让取消
+			// 获取我订阅的全部组合视图和视图中使用的
+			// List<String> byView = viewRelToProtService.getByView(viewId);
+			List<String> vpIds = subViewPortService
+					.getViewPortfoliosBySubscriber(user.getLoginName());
+			for (String vpId : vpIds) {
+				List<String> viewIds = viewRelToProtService
+						.getViewIdByProtfolio(vpId);
+				if (viewIds.contains(viewId)) {
+					throw new Exception("视图已经被组合视图使用.无法取消订阅!");
+				}
+			}
+
+			subService.delete(user.getLoginName(), viewId);
+			ret.put("message", "取消订阅成功");
+		} catch (Exception e) {
+			log.dLog(e.getMessage());
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+
+		return new JsonRepresentation(ret.toString());
+	}
+
+	public User getUser() {
+		Series<Header> headers = getRequest().getHeaders();
+		String values = headers.getValues("token");
+		if (values == null || "".equals(values))
+			return null;
+		Des des = new Des();
+		String decrypt = des.decrypt(values);
+		String[] split = decrypt.split("\\|");
+		return userService.getUserByLoginName(split[0]);
+	}
+}

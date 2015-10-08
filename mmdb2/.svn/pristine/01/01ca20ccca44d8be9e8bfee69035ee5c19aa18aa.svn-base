@@ -1,0 +1,54 @@
+package com.mmdb.model.security.storage;
+
+import java.util.List;
+
+import com.mmdb.core.framework.neo4j.QueryUtil;
+import org.apache.lucene.search.BooleanQuery;
+import org.springframework.stereotype.Service;
+
+import com.mmdb.core.framework.neo4j.storage.NodeStorage;
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.security.User;
+
+/**
+ * 用户存储
+ *
+ * @author XIE
+ */
+@Service
+public class UserStorage extends NodeStorage<User> {
+    private Log log = LogFactory.getLogger("UserStorage");
+
+    /**
+     * 根据id获取用户
+     *
+     * @param id 用户id
+     * @return
+     * @throws Exception
+     */
+    public User getById(String id) throws Exception {
+        List<User> list = this.getByProperty("id", id);
+        if (list.size() == 1) {
+            return list.get(0);
+        } else if (list.size() > 1) {
+            log.eLog("User[" + id + "]not unique.");
+            throw new Exception("User[" + id + "]not unique.");
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * 获取指定分类下的数据
+     *
+     * @param cateId 分类id
+     * @return
+     * @throws Exception
+     */
+    public List<User> getByCategory(String cateId) throws Exception {
+        BooleanQuery bq = QueryUtil.booleanQuery();
+        bq.add(QueryUtil.termQuery("categoryId", cateId.toLowerCase()), QueryUtil.Occur.MUST.value());
+        return this.query(bq);
+    }
+}

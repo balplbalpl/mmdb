@@ -1,0 +1,197 @@
+package com.mmdb.service.relation.impl;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+
+import com.mmdb.core.framework.neo4j.proxy.AbstractDomain;
+import com.mmdb.model.categroy.CiCategory;
+import com.mmdb.model.categroy.UserCategory;
+import com.mmdb.model.info.CiInformation;
+import com.mmdb.model.info.UserInformation;
+import com.mmdb.model.info.ViewInformation;
+import com.mmdb.model.info.storage.UserInfoStorage;
+import com.mmdb.model.info.storage.ViewInfoStorage;
+import com.mmdb.model.relation.UserCiRelation;
+import com.mmdb.model.relation.storage.UserCiRelStorage;
+import com.mmdb.model.relation.storage.UserViewRelStorage;
+import com.mmdb.util.Neo4jStringUtils;
+
+@Component
+public class UserCiRelService extends AbstractDomain {
+	@Autowired
+	private UserCiRelStorage userCiRelStorage;
+	@Autowired
+	private UserInfoStorage userInfoStorage;
+	// private UserStorage userStorage;
+	@Autowired
+	private ViewInfoStorage viewStorage;
+	@Autowired
+	private UserViewRelStorage userViewRelStorage;
+
+	public List<UserCiRelation> getAll() throws Exception {
+		return userCiRelStorage.getAll();
+	}
+
+	public UserCiRelation getById(String id) throws Exception {
+		return userCiRelStorage.getById(id);
+	}
+
+	public UserCiRelation getById(Long neoid) throws Exception {
+		return userCiRelStorage.getOne(neoid);
+	}
+
+	public UserCiRelation save(UserCiRelation userview) throws Exception {
+		return userCiRelStorage.save(userview);
+	}
+
+	public void save(List<UserCiRelation> userviews) throws Exception {
+		for (UserCiRelation userview : userviews) {
+			userCiRelStorage.save(userview);
+		}
+	}
+
+	public void delete(UserCiRelation userview) throws Exception {
+		userCiRelStorage.delete(userview);
+	}
+
+	public void delete(List<UserCiRelation> userviews) throws Exception {
+		userCiRelStorage.delete(userviews);
+	}
+
+	public void deleteAll() throws Exception {
+		userCiRelStorage.deleteAll();
+	}
+
+	public UserCiRelation update(UserCiRelation userview) throws Exception {
+		return userCiRelStorage.update(userview);
+	}
+
+	public void update(List<UserCiRelation> userviews) throws Exception {
+		for (UserCiRelation userview : userviews) {
+			userCiRelStorage.update(userview);
+		}
+	}
+
+	public UserCiRelation update(Long neoid, UserCiRelation userview)
+			throws Exception {
+		return userCiRelStorage.update(neoid, userview);
+	}
+
+	public List<ViewInformation> qureyViewByUser(UserInformation user)
+			throws Exception {
+		/*
+		 * List<ViewInformation> views = new ArrayList<ViewInformation>();
+		 * String CQL =
+		 * "match (n:User) where n.`username` = '"+user.getUsername(
+		 * )+"' optional match (n)-[:User2View]->(m:View)" + "	return m" +
+		 * " union" +
+		 * " match (n:User) where n.`username` = '"+user.getUsername()
+		 * +"' optional match (n)-[:User2ViewCate]->(p:ViewCate)" + " with p" +
+		 * " match (a:ViewCate) where a.id = p.id optional match (m:View)-[:View2Cate]->(a)"
+		 * + " return m"; views = viewStorage.query(CQL,user); //
+		 * RelationshipType rt =
+		 * Neo4jUtil.getRelationshipType(RelationshipTypes.USER2VIEW); // Node
+		 * node = userStorage.getOne(user); // Iterable<Relationship> rs =
+		 * node.getRelationships(Direction.OUTGOING, rt); // for (Relationship r
+		 * : rs) { // long eid = r.getEndNode().getId(); // ViewInformation view
+		 * = viewStorage.getOne(eid); // views.add(view); // } return views;
+		 */
+		return null;
+	}
+
+	public void deleteByUser(UserInformation user) throws Exception {
+		// 通过用户删除 用户到视图的关系 这删除用户到视图和视图分类的关系
+		String CQL = "match (n:User) where n.`username` = '"
+				+ user.getUsername()
+				+ "' "
+				+ "optional match (n)-[r:User2View]->(m:View),(n)-[r1:User2ViewCate]->(m:ViewCate) delete r,r1 ";
+		userInfoStorage.query(CQL);
+		// RelationshipType rt =
+		// Neo4jUtil.getRelationshipType(RelationshipTypes.USER2VIEW);
+		// Node node = userStorage.getOne(user);
+		// Iterable<Relationship> rs = node.getRelationships(Direction.OUTGOING,
+		// rt);
+		// for (Relationship r : rs) {
+		// r.delete();
+		// }
+	}
+
+	public void deleteByView(UserInformation user, List<String> viewJsonIds)
+			throws Exception {
+		String CQL = "match (n:User) where n.`username` = '"
+				+ user.getUsername() + "' "
+				+ "optional match (n)-[r:User2View]->(m:View) return r";
+		userViewRelStorage.query(CQL);
+		// RelationshipType rt =
+		// Neo4jUtil.getRelationshipType(RelationshipTypes.USER2VIEW);
+		// Node node = userStorage.getOne(user);
+		// Iterable<Relationship> rs = node.getRelationships(Direction.OUTGOING,
+		// rt);
+		// for (Relationship r : rs) {
+		// UserCiRelation rel = userCiRelStorage.getOne(r.getId());
+		// // String rid = HexString.json2Str(rel.getView().getCategoryId(),
+		// rel.getView().`());
+		// String rid = rel.getNeo4jid()+"";
+		// if (viewJsonIds.contains(rid)) {
+		// r.delete();
+		// }
+		// }
+	}
+
+	public List<UserInformation> qureyUserByView(ViewInformation view)
+			throws Exception {
+		List<UserInformation> users = new ArrayList<UserInformation>();
+		String id = Neo4jStringUtils.cypherESC(view.getId().toString());
+		String CQL = "match (n:View) where n.`id`='" + id
+				+ "' optional match (n)<-[:User2View]-(m:User) return m";
+		users = userInfoStorage.query(CQL);// 取User
+		return users;
+	}
+
+	public Map<String, Long> saveOrUpdate(Set<UserCiRelation> rels)
+			throws Exception {
+		Map<String, Long> retMap = new HashMap<String, Long>();
+		long snum = 0, unum = 0;
+		for (UserCiRelation rel : rels) {
+			UserCiRelation info = userCiRelStorage.getById(rel.getId());
+			if (info == null) {
+				userCiRelStorage.save(rel);
+				snum++;
+			} else {
+				// info = info.unLazy();
+				info.setUser(info.getUser());
+				info.setCi(info.getCi());
+				userCiRelStorage.update(info);
+				unum++;
+			}
+		}
+		retMap.put("save", snum);
+		retMap.put("update", unum);
+		return retMap;
+	}
+
+	/**
+	 * 设置用户可见的CI
+	 * 
+	 * @param ucL
+	 *            用户分类 List
+	 * @param uiL
+	 *            用户 List
+	 * @param ccL
+	 *            CI分类 List
+	 * @param ciL
+	 *            Ci List
+	 */
+	public void setUserVisibleCi(List<UserCategory> ucL,
+			List<UserInformation> uiL, List<CiCategory> ccL,
+			List<CiInformation> ciL) {
+		userCiRelStorage.UserCateToCiCateM(ucL, uiL, ccL, ciL);
+	}
+
+}

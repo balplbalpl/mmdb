@@ -1,0 +1,60 @@
+<div>
+
+	<div class="main-box-right-content-right">
+		<div class="main-box-right-content-right-content box-border box-shadow" ng-class="{'no-margin-left': LAYOUT.collapsedSidebar}">
+
+			<!-- 画布上方工具条 -->
+			<div class="main-box-content-heading">
+
+				<div class="main-box-content-heading-tool">
+				</div>
+			</div>
+
+
+			<div class="main-box-content-body">
+
+				<div class="main-box-content-panel-container">
+					<div class="main-box-content-panel-container-body no-margin-right psrl" ui-view>
+
+						<div class="alert alert-warning psalcc text-center" style="width: 300px; height: 50px; top: 100px; bottom: auto;">
+							<h4><i class="fa fa-hand-o-left"></i> 请点击左边的菜单</h4>
+						</div>
+
+					</div>
+				</div>
+
+			</div>
+		</div>
+	</div>
+
+	<div class="main-box-right-content-left box-border" ng-show="!LAYOUT.collapsedSidebar">
+
+		<div class="bgw h100">
+			<!-- 用户信息 -->
+			<div class="user-menu">
+				<div class="user-head-img">
+					<img ng-src="{{static(userInfo.icon) + '?' + userInfo.iconLastUpdate}}" />
+					<div class="user-nick text-primary">{{ userInfo.userName }}</div>
+					<div class="user-nick" ng-class="{'text-danger': userInfo.isManager, 'text-success': !userInfo.isManager}">［{{ userInfo.ownerRoles }}］</div>
+				</div>
+
+				<hr />
+
+				<div class="user-menu-list">
+					<ul>
+						<li ui-sref-active="active" ui-sref="home.user.overview"><span></span><a>整体概况</a></li>
+						<li ui-sref-active="active" ui-sref="home.user.subscription"><span></span><a>我的视图</a></li>
+						<li ui-sref-active="active" ui-sref="home.user.deletedView"><span></span><a>已删除的视图</a></li>
+						<li ui-sref-active="active" ui-sref="home.user.headImage"><span></span><a>修改头像</a></li>
+						<li ui-sref-active="active" ui-sref="home.user.monitor"><span></span><a>监控</a></li>
+						<li ui-sref-active="active" ui-sref="home.user.ci"><span></span><a>我的CI</a></li>
+						<li ui-sref-active="active" ui-sref="home.user.kpi"><span></span><a>我的KPI</a></li>
+					</ul>
+				</div>
+			</div>
+			<!-- 用户信息 END -->
+		</div>
+
+	</div>
+
+</div>

@@ -1,0 +1,228 @@
+package com.mmdb.rest.relation;
+
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+
+import net.sf.json.JSONObject;
+
+import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.Status;
+import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.resource.Get;
+import org.restlet.resource.ServerResource;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.SpringContextUtil;
+import com.mmdb.core.utils.SysProperties;
+import com.mmdb.model.info.CiInformation;
+import com.mmdb.model.info.ViewInformation;
+import com.mmdb.service.category.ICiCateService;
+import com.mmdb.service.info.ICiInfoService;
+import com.mmdb.service.info.IViewInfoService;
+import com.mmdb.service.relation.ICiViewRelService;
+
+public class CiViewRelRest extends ServerResource {
+	private Log log = LogFactory.getLogger("CiViewRelRest");
+	private ICiCateService cateService;
+	private ICiInfoService ciInfoService;
+	private ICiViewRelService ciViewRelService;
+	private IViewInfoService vInfoService;
+
+	@Override
+	public void init(Context context, Request request, Response response) {
+		super.init(context, request, response);
+		cateService = (ICiCateService) SpringContextUtil
+				.getApplicationContext().getBean("ciCateService");
+
+		ciInfoService = (ICiInfoService) SpringContextUtil
+				.getApplicationContext().getBean("ciInfoService");
+
+		ciViewRelService = (ICiViewRelService) SpringContextUtil
+				.getApplicationContext().getBean("ciViewRelServiceImpl");
+
+		vInfoService = (IViewInfoService) SpringContextUtil
+				.getApplicationContext().getBean("viewInfoService");
+
+		setExisting(true);
+	}
+
+	@Get
+	public Representation getMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		String id = (String) getRequestAttributes().get("param2");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+		if (id != null) {
+			try {
+				id = URLDecoder.decode(id, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + id + "]解析失败");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+
+		if ("ci".equals(param1)) {
+			return getViewsByCi(id);
+		} else if ("view".equals(param1)) {
+			return getCisByView(id);
+		} else {
+			return null;
+		}
+	}
+
+	//
+	// @Post
+	// public Representation postMethod(Representation entity) {
+	// JSONObject ret = new JSONObject();
+	// String param1 = (String) getRequestAttributes().get("param1");
+	// if (param1 != null) {
+	// try {
+	// param1 = URLDecoder.decode(param1, "utf-8");
+	// } catch (UnsupportedEncodingException e) {
+	// log.eLog(e);
+	// ret.put("message", "[" + param1 + "]解析失败");
+	// getResponse().setStatus(new Status(600));
+	// }
+	// }
+	//
+	// String operation = null;
+	// try {
+	// if ("import".equals(param1)) {
+	// return new JsonRepresentation(importData(entity));
+	// }
+	//
+	// Form form = entity == null ? null : new Form(entity);
+	// operation = form.getQueryString();
+	// operation = URLDecoder.decode(operation, "utf-8");
+	// operation = new String(operation.getBytes("iso-8859-1"), "utf-8");
+	//
+	// JSONObject params = JSONObject.fromObject(operation);
+	// return saveCiCategory(params);
+	// } catch (Exception e) {
+	// log.eLog(e);
+	// ret.put("message", "[" + operation + "]解析失败");
+	// getResponse().setStatus(new Status(600));
+	// }
+	// return new JsonRepresentation(ret.toString());
+	// }
+	//
+	// @Put
+	// public Representation putMethod(Representation entity) {
+	// JSONObject ret = new JSONObject();
+	//
+	// Form form = entity == null ? null : new Form(entity);
+	// String operation = null;
+	// try {
+	// operation = form.getQueryString();
+	// operation = URLDecoder.decode(operation, "utf-8");
+	// operation = new String(operation.getBytes("iso-8859-1"), "utf-8");
+	// JSONObject params = JSONObject.fromObject(operation);
+	// return editCiCategory(params);
+	// } catch (Exception e) {
+	// log.eLog(e);
+	// ret.put("message", "[" + operation + "]解析失败");
+	// getResponse().setStatus(new Status(600));
+	// }
+	// return new JsonRepresentation(ret.toString());
+	// }
+	//
+	// @Delete
+	// public Representation delMethod(Representation entity) {
+	// JSONObject ret = new JSONObject();
+	//
+	// String param1 = (String) getRequestAttributes().get("param1");
+	// if (param1 != null) {
+	// try {
+	// param1 = URLDecoder.decode(param1, "utf-8");
+	// } catch (UnsupportedEncodingException e) {
+	// log.eLog(e);
+	// ret.put("message", "[" + param1 + "]解析失败");
+	// getResponse().setStatus(new Status(600));
+	// return new JsonRepresentation(ret.toString());
+	// }
+	// }
+	// if (param1 == null || "".equals(param1)) {
+	// return deleteAll();
+	// } else {
+	// return deleteCateById(param1);
+	// }
+	//
+	// }
+
+	private Representation getCisByView(String viewId) {
+		JSONObject ret = new JSONObject();
+		try {
+			log.dLog("getCisByView");
+			List<String> ciIds = ciViewRelService.getByView(viewId);
+			List<CiInformation> ciInfos = ciInfoService.getByIds(ciIds);
+			if (ciInfos == null || ciInfos.size() == 0) {
+				throw new Exception("未发现相关ci");
+			}
+			List<Map<String, Object>> retData = new ArrayList<Map<String, Object>>();
+			String type = SysProperties.get("svg.base");
+			for (CiInformation ciInfo : ciInfos) {
+				Map<String, Object> asMap = ciInfo.asMapForRest();
+				String image = (String) asMap.get("icon");
+				image = "/resource/svg/" + type + "/" + image;
+				asMap.put("icon", image);
+				retData.add(asMap);
+			}
+			ret.put("data", retData);
+			ret.put("message", "获取相关ci成功");
+		} catch (Exception e) {
+			e.printStackTrace();
+			getResponse().setStatus(new Status(600));
+			ret.put("message", e.getMessage());
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation getViewsByCi(String ciId) {
+		JSONObject ret = new JSONObject();
+		try {
+			log.dLog("getViewsByCi");
+			List<String> viewIds = ciViewRelService.getByCi(ciId);
+			List<ViewInformation> vInfos = vInfoService.getByids(viewIds);
+			if (vInfos == null || vInfos.size() == 0) {
+				throw new Exception("未发现相关视图");
+			}
+			List<Map<String, Object>> retData = new ArrayList<Map<String, Object>>();
+			for (ViewInformation vInfo : vInfos) {
+				Map<String, Object> asMap = vInfo.asMapForRest();
+				List<String> ciIds = ciViewRelService.getByView(vInfo
+						.getCategoryId());
+				if (ciIds == null) {
+					asMap.put("ciSize", 0);
+				} else {
+					asMap.put("ciSize", ciIds.size());
+				}
+				retData.add(asMap);
+			}
+			ret.put("data", retData);
+			ret.put("message", "获取相关视图成功");
+		} catch (Exception e) {
+			e.printStackTrace();
+			getResponse().setStatus(new Status(600));
+			ret.put("message", e.getMessage());
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+}

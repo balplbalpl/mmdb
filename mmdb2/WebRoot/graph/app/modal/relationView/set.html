@@ -1,0 +1,21 @@
+<div class="modal-header">
+	<h3 class="modal-title">关联视图</h3>
+</div>
+
+<div class="modal-body relation-view">
+
+
+	<div class="relation-view-list clear">
+		<div ng-repeat="item in views" class="relation-view-item" ng-class="{active: item._checked}" ng-click="item._checked = !item._checked;refresh();">
+			<img ng-src="{{staticUrl(item.imageUrl)}}" class="img-rounded" />
+
+			<div class="relation-view-label">{{ item.categoryName }} | {{ item.name }}</div>
+		</div>
+	</div>
+
+</div>
+
+<div class="modal-footer">
+	<button class="btn btn-warning" ng-click="$modal.close()">取消</button>
+	<button class="btn btn-primary" ng-click="ok()">确定</button>
+</div>

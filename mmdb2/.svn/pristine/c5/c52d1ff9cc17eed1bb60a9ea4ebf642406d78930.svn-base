@@ -1,0 +1,48 @@
+package com.mmdb.mongo;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.Statement;
+import java.util.ResourceBundle;
+
+import com.mmdb.mongo.mongodb.jdbc.MongoConnection;
+import com.mongodb.DB;
+
+public class MongoConnect {
+	private static Connection c = null;
+
+	public static Connection getConnection() {
+		try {
+			if (c == null) {
+				ResourceBundle init = ResourceBundle
+						.getBundle("config.demo.demo-global");
+				String surl = init.getString("mongo.url");
+				Class.forName("com.mmdb.mongo.mongodb.jdbc.MongoDriver");
+				c = DriverManager.getConnection(surl);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+		return c;
+	}
+
+	public static int executeUpdate(String sql) throws Exception {
+		Connection conn = MongoConnect.getConnection();
+		Statement stmt = null;
+		try {
+			stmt = conn.createStatement();
+			return stmt.executeUpdate(sql);
+		} catch (Exception e) {
+			throw e;
+		} finally {
+			if (stmt != null) {
+				stmt.close();
+			}
+		}
+	}
+
+	public static DB getDb() {
+		return ((MongoConnection) getConnection()).getNativeDB();
+	}
+}

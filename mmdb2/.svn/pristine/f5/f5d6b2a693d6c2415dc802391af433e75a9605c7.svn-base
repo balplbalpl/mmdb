@@ -1,0 +1,47 @@
+
+<div>
+
+	<div class="main-box-right-content-right">
+		<div class="main-box-right-content-right-content box-border box-shadow" ng-class="{'no-margin-left': LAYOUT.collapsedSidebar}">
+
+			<!-- 画布上方工具条 -->
+			<div class="main-box-content-heading">
+
+				<div graph-toolbar="toolbarParams"></div>
+
+				<div class="main-box-content-heading-tool">
+					<button class="btn btn-info btn-xs" ng-click="infoParams.toggle()">
+						<i class="fa fa-bars"></i>
+					</button>
+				</div>
+			</div>
+
+
+			<div class="main-box-content-body">
+
+				<div class="main-box-content-panel-container">
+					<div class="main-box-content-panel-container-body" ng-class="{'no-margin-right': !infoParams.showFlag}">
+						<div class="graph" ng-class="{'graph-has-timeline': isShowTimeline}">
+							<div class="h100 w100" id="graph" tabindex="-1"></div>
+							<div graph-table="graphTableParams" class="graph-ci-table" ng-show="params.showFlag"></div>
+							<div class="graph-outline" id="graph-outline"></div>
+						</div>
+
+						<div class="graph-timeline" time-line="timeLineParams" ng-show="isShowTimeline"></div>
+					</div>
+				</div>
+
+				<div class="main-box-content-panel-right" ng-show="infoParams.showFlag">
+					<div graph-info="infoParams" class="h100"></div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="main-box-right-content-left" ng-show="!LAYOUT.collapsedSidebar">
+		<div class="bgw h100">
+			<div graph-viewtree="viewtreeParams" class="graph-viewtree"></div>
+		</div>
+	</div>
+
+</div>

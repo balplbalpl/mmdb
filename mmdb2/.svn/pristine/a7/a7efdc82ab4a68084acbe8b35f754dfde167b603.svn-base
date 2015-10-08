@@ -1,0 +1,75 @@
+<div class="user-kpi-right">
+	<input type="text" placeholder="过滤KPI分类" class="form-control" ng-model="cateFilter" />
+	<treecontrol class="tree-classic"
+				 tree-model="dataForTheTree"
+				 options="treeOptions"
+				 on-selection="showSelected(node)"
+				 selected-node=""
+				 filter-expression="cateFilter">
+		<img src="{{staticUrl(node.icon)}}" /> {{node.text}}
+	</treecontrol>
+</div>
+<div class="user-kpi-left">
+	<div class="user-kpi-filter clearfix">
+		<input type="text" placeholder="过滤KPI" class="form-control pull-right mt20 mr20 ml20 mb20" ng-model="filter" ng-init="filter = ''"/>
+	</div>
+	<div class="user-kpi-table" ng-scroll="true,true">
+		<table class="table w100 table-bordered" ng-table="tableParams">
+			<tr ng-repeat-start="item in list = ($data | filter: filterMethod)">
+				<td data-title="'单位'"><span>{{item.unit}}</span></td>
+				<td data-title="'KPI名称'"><span>{{item.name}}</span></td>
+				<td data-title="'OWNER'"><span>{{item.owner}}</span></td>
+				<td data-title="'查看阈值'">
+					<button ng-click="item._expand = !item._expand" class="btn btn-link btn-xs">
+						<i class="fa fa-plus" ng-show="!item._expand"></i>
+						<i class="fa fa-minus" ng-show="item._expand"></i>
+					</button>
+				</td>
+			</tr>
+			<tr ng-repeat-end ng-show="item._expand">
+				<td colspan="12">
+					<div class="user-kpi-table-threshold-list w100" ng-repeat="item1 in item.threshold">
+						<table class="table w100 table-bordered table-striped">
+							<tr>
+								<td>
+									<div class="user-kpi-table-threshold-list-left">
+										<div>
+											开始时间： {{item1.startTime}}
+										</div>
+										<div>
+											结束时间： {{item1.endTime}}
+										</div>
+										<div>
+											重复次数： {{item1.repeat}}
+										</div>
+									</div>
+								</td>
+								<td>
+									<div class="user-kpi-table-threshold-list-right w100">
+										<table class="w100 table mb0">
+											<tr>
+												<th colspan="4">最低</th>
+												<th colspan="4">最高</th>
+												<th colspan="4">级别</th>
+											</tr>
+											<tr colspan="12" ng-repeat="item2 in item1.threshold">
+												<td colspan="4">{{item2.lowLimit}}</td>
+												<td colspan="4">{{item2.highLimit}}</td>
+												<td colspan="4">{{item2.severity}}</td>
+											</tr>
+										</table>
+									</div>
+								</td>
+							</tr>
+						</table>
+					</div>
+				</td>
+			</tr>
+			<tr ng-show="!list.length">
+				<td colspan="12" class="result-ci-alert-td">
+					<div class="alert alert-warning mt20 mr20 ml20 mb20"><i class="fa fa-exclamation-circle"></i> 没有数据</div>
+				</td>
+			</tr>
+		</table>
+	</div>
+</div>

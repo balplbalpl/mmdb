@@ -1,0 +1,40 @@
+
+<div id="adm_error" style="
+	width: 400px;
+  height: 150px;
+  background-color: #fff;
+  position: fixed;
+  /*opacity: 0.8;*/
+  /*overflow: auto;*/
+  padding: 10px;
+  border: 1px solid #000;
+  margin: 20px;
+  z-index: 100000;
+  right: 0;
+  bottom: 0;
+
+
+	">
+
+
+
+	<div id="adm_error_title" class="text-right">
+        <!--<i class="fa fa-trash-o" style="font-size: 20px"></i>-->
+        <i id="adm_error_clear" class="fa fa-trash-o fa-lg"></i>
+        <i id="adm_error_hide" class="fa fa-times fa-lg"></i>
+	</div>
+
+
+
+
+
+	<div id="adm_error_body" style=" overflow: auto;">
+		{{#each list}}
+            <div>{{this}}</div>
+		{{/each}}
+	</div>
+
+
+</div>
+
+

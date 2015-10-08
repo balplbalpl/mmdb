@@ -1,0 +1,13 @@
+<div class="modal-header">
+	<h3 class="modal-title">{{title}}</h3>
+</div>
+<div class="modal-body">
+	<rzslider
+		rz-slider-model="number"
+		rz-slider-floor="minValue"
+		rz-slider-ceil="maxValue"></rzslider>
+</div>
+<div class="modal-footer">
+	<button class="btn btn-warning" ng-click="$modal.close()">取消</button>
+	<button class="btn btn-primary" ng-click="ok()">确定</button>
+</div>

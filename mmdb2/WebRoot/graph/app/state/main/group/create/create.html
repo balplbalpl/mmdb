@@ -1,0 +1,297 @@
+
+<div>
+	<div class="main-box-right-content-right">
+		<div class="main-box-right-content-right-content box-border box-shadow" ng-class="{'no-margin-left': LAYOUT.collapsedSidebar}">
+			<!-- 画布上方工具条 -->
+			<div class="main-box-content-heading">
+				<div class="toolbar group-list-view-operate" style="right:10px">
+					<div class="toolbar-group" ng-show="editToolShow">
+						<button type="button" class="toolbar-btn" ng-click="expandView();" popover="放大" popover-trigger="mouseenter" ng-hide="isExpand">
+							<i class="toolbar-icon toolbar-icon-expand"></i>
+						</button>
+						<button type="button" class="toolbar-btn ng-hide" ng-click="compressView();" popover="缩小" popover-placement="bottom" popover-trigger="mouseenter" ng-show="isExpand">
+							<i class="toolbar-icon toolbar-icon-compress"></i>
+						</button>
+						<button type="button" class="toolbar-btn" ng-click="show3DView();" popover="3D" popover-trigger="mouseenter" popover-placement="top" ng-show="is2D">
+							<i class="toolbar-icon toolbar-icon-3d"></i>
+						</button>
+						<i class="toolbar-divider"></i>
+						<button type="button" class="toolbar-btn" ng-click="show2DView();" popover="2D" popover-trigger="mouseenter" popover-placement="top" ng-hide="is2D">
+							<i class="toolbar-icon toolbar-icon-group"></i>
+						</button>
+						<i class="toolbar-divider"></i>
+						<button type="button" class="toolbar-btn" ng-click="backEdit();">
+							<i class="toolbar-icon toolbar-icon-undo"></i>
+						</button>
+					</div>
+				</div>
+			</div>
+			<div class="main-box-content-body">
+				<div ng-show="showView">
+					<div class="main-box-content-panel-container" id="showView" ng-show="is2D">
+						<div ui-view="ViewContent"></div>
+					</div>
+					<div class="main-box-content-panel-container" id="show3DView" ng-hide="is2D">
+						<div ui-view="ViewContent3D"></div>
+					</div>
+				</div>
+
+				<div class="main-box-content-panel-container" ng-show="!showView">
+					<div class="main-box-content-panel-container-body no-margin-right pd10" >
+						<!-- 格子上方 -->
+						<div class="group-box" ng-click="showSet();">
+							<div class="row mb10">
+								<div class="col-md-3 clearfix">
+									<div class="col-md-2">
+										<label>行：</label>
+									</div>
+									<div class="col-md-10">
+										<rzslider
+											rz-slider-model="group.content.d3setting.rows"
+											rz-slider-floor="1"
+											rz-slider-ceil="6"></rzslider>
+									</div>
+
+
+									<!--<div class="group-set-view-num-box">-->
+									<!--<input type="text" value="3" class="group-set-view-num">-->
+									<!--<i class="fa fa-sort-up"></i>-->
+									<!--<i class="fa fa-sort-down"></i>-->
+									<!--<span>行</span>-->
+									<!--</div>-->
+									<!--<div class="group-set-view-num-box">-->
+									<!--<input type="text" value="3" class="group-set-view-num">-->
+									<!--<i class="fa fa-sort-up"></i>-->
+									<!--<i class="fa fa-sort-down"></i>-->
+									<!--<span>列</span>-->
+									<!--</div>-->
+								</div>
+								<div class="col-md-3 clearfix">
+									<div class="col-md-2">
+										<label>列：</label>
+									</div>
+									<div class="col-md-10">
+										<rzslider
+											rz-slider-model="group.content.d3setting.cols"
+											rz-slider-floor="1"
+											rz-slider-ceil="6"></rzslider>
+									</div>
+
+								</div>
+							</div>
+							<!-- 格子上方END -->
+							<div class="group-box-layer psrl" ng-scroll="false,true">
+								<div class="col-md-12" ng-repeat="(i,items) in group.content.d3setting.layers">
+									<div class="group-box-item" ng-repeat="(index, item) in items track by $index" ng-style="{'width':width,'height':height,'maxWidth':500,'maxHeight':400}">
+										<div data-index="{{i}}" class="group-box-item-box" data-col="{{index}}" ondrop="angular.element(this).scope().drop(event)" ondragover="angular.element(this).scope().allowDrop(event)"  ng-mouseover="hasImg($event);" ng-mouseleave="hasImgOut($event)" ng-click="setBgColor(item,$event);">
+											<!--ng-show="item.isImg"-->
+											<!--<div ng-show="item.src ? false :true" class="psalcc alert alert-warning" style=" z-index:0; height: 50px; width: 200px;">-->
+												<!--<h4>选择左侧视图列表</h4>-->
+											<!--</div>-->
+											<span ng-show="item.src ? false :true" class="reminderMes">拖拽左侧视图列表</span>
+											<div id="{{item.src ? item.viewid+i+index+'group' :''}}" class="group-box-item-out" ng-show="item.src ? true :false" ng-style="{'backgroundColor':item.src ? item.floorBgColor :'#f5f5f5'}">
+												<img data-content="{{item.viewTitle}}" data-text="{{item.viewText}}" id="{{item.src ? item.viewid+i+index+'image' :''}}" draggable="true" ondragstart="angular.element(this).scope().drag(event)" ng-src="{{item.src ? item.src :undefined}}" title="{{item.viewid}}" ng-style="{'transform':item.src ? (item.isVertical ? 'skew(0deg)':'skew(45deg)'):'','width':item.src ? (item.isVertical ? '90%':'60%'):'','height':item.src ? (item.isVertical ? '90%':'60%'):''}">
+												<div style="position: absolute;width: 100%; bottom: 0px; height: 35px; background:rgba(50,50,50,0.3); color: #fff;">
+													<h5 class="col-md-6">分类：{{item.viewTitle}}</h5>
+													<h6 class="col-md-6 text-right">名称：{{item.viewText}}</h6>
+												</div>
+											</div>
+											<div class="group-box-item-operateBtn" style="display: none;">
+												<div class="btn-group">
+													<button class="btn btn-danger btn-xs" data-action="remove" title="删除" ng-click="delView(item,$event);">
+														<i class="fa fa-times"></i>
+													</button>
+													<button class="btn btn-primary btn-xs" data-action="repeat" title="3D水平垂直设置" ng-click="setView(item,$event);">
+														<i class="fa fa-repeat"></i>
+													</button>
+												</div>
+											</div>
+										</div>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+					<div class="main-box-content-panel-right" ng-show="!showView">
+						<div ng-show="!setConfig">
+							<div class="group-box-item-set-body psrl" ng-scroll="false,true">
+								<div class="pt10">
+									<h5 class="pl10" ng-click="basicSet._expand = !basicSet._expand"><i class="fa fa-cog pr5 iconBlue"></i>基本属性
+									<span class="drag-box-tool">
+										<i class="fa fa-angle-left" ng-if="basicSet._expand"></i>
+										<i class="fa fa-angle-down" ng-if="!basicSet._expand"></i>
+									</span>
+									</h5>
+								</div>
+
+								<hr>
+								<div class="pd10" ng-show="!basicSet._expand">
+									<div class="form-group">
+										<input type="text" class="form-control" ng-model="group.name"  placeholder="请输入视图名称（必填）">
+									</div>
+									<textarea class="form-control" rows="3" ng-model="group.content.viewDescription" placeholder="视图描述（必填）" style="resize: none;"></textarea>
+								</div>
+								<h5 class="pl10" ng-click="twoDSet._expand = !twoDSet._expand"><i class="fa fa-cog pr5 iconBlue"></i>2D属性
+									<span class="drag-box-tool">
+										<i class="fa fa-angle-left" ng-if="twoDSet._expand"></i>
+										<i class="fa fa-angle-down" ng-if="!twoDSet._expand"></i>
+									</span>
+								</h5>
+								<hr>
+								<div class="form-horizontal pr5" >
+									<div ng-show="!twoDSet._expand" class="pd10">
+										<div class="form-group">
+											<label class="col-sm-4 control-label">工具条大小</label>
+											<div class="col-sm-8">
+												<rzslider rz-slider-model="group.content.d2setting.toolbarSize" rz-slider-floor="100" rz-slider-ceil="200" rz-slider-translate="translate"></rzslider>
+											</div>
+										</div>
+										<div class="form-group">
+											<label class="col-sm-4 control-label">焦点图比例</label>
+											<div class="col-sm-8">
+												<rzslider rz-slider-model="group.content.d2setting.outLineSize" rz-slider-floor="50" rz-slider-ceil="90" rz-slider-translate="formatToPercentage"></rzslider>
+											</div>
+										</div>
+										<div class="form-group">
+											<label class="col-sm-4 control-label">布局</label>
+											<div class="col-sm-8">
+												<select class="form-control" ng-model="group.content.d2setting.layout">
+													<option value="top">上</option>
+													<option value="middle">中</option>
+													<option value="down">下</option>
+												</select>
+											</div>
+										</div>
+										<div class="form-group">
+											<label class="col-sm-4 control-label">最大个数</label>
+											<div class="col-sm-8">
+												<rzslider rz-slider-model="group.content.d2setting.maxCount" rz-slider-floor="2" rz-slider-ceil="5"></rzslider>
+											</div>
+										</div>
+										<div class="form-group">
+											<label class="col-sm-4 control-label">顶部颜色</label>
+											<div class="col-sm-8">
+												<input class="form-control" colorpicker type="text" ng-model="group.content.d2setting.toolbarBgColor" placeholder="点击拾取颜色"/>
+											</div>
+										</div>
+										<div class="form-group">
+											<label class="col-sm-4 control-label">按钮颜色</label>
+											<div class="col-sm-8">
+												<input class="form-control" colorpicker type="text" ng-model="group.content.d2setting.btnColor" placeholder="点击拾取颜色"/>
+											</div>
+										</div>
+									</div>
+									<h5 class="pl10" ng-click="threeDSet._expand = !threeDSet._expand"><i class="fa fa-cog pr5 iconBlue"></i>3D属性
+										<span class="drag-box-tool">
+											<i class="fa fa-angle-left" ng-if="threeDSet._expand"></i>
+											<i class="fa fa-angle-down" ng-if="!threeDSet._expand"></i>
+										</span>
+									</h5>
+									<hr>
+									<div ng-show="!threeDSet._expand" class="pd10">
+										<div class="form-group pd10" >
+											<label class="col-sm-4 control-label">层间距</label>
+											<div class="col-sm-8">
+												<rzslider rz-slider-model="group.content.d3setting.layerMargin" rz-slider-floor="10" rz-slider-ceil="400"></rzslider>
+											</div>
+										</div>
+										<div class="form-group">
+											<label class="col-sm-4 control-label">层内画布水平间距</label>
+											<div class="col-sm-8">
+												<rzslider rz-slider-model="group.content.d3setting.layerItemMargin" rz-slider-floor="10" rz-slider-ceil="200"></rzslider>
+											</div>
+										</div>
+									</div>
+
+								</div>
+							</div>
+							<div class="group-box-item-set-foot">
+								<div class="form-group">
+									<button class="col-sm-12 btn btn-lg btn-info btn-block mb10" ng-show="$state.params.id ? false : true" ng-click="saveView();">
+										<i class="fa fa-save"> 保存</i>
+									</button>
+									<div class="col-md-12 btn-group mb10" ng-show="$state.params.id ? true : false">
+										<button class="col-sm-4 btn btn-lg btn-info"  ng-click="saveAsView();">
+											<i class="fa fa-save"> 另存为</i>
+										</button>
+										<button class="col-sm-4 btn btn-lg btn-success" ng-click="updateView();">
+											<i class="fa fa-save"> 更新</i>
+										</button>
+										<button class="col-sm-4 btn btn-lg btn-danger"  ng-click="delGroupView();">
+											<i class="fa fa-trash"> 删除</i>
+										</button>
+									</div>
+
+								</div>
+							</div>
+						</div>
+						<div ng-show="setConfig">
+							<div class="pd10" style="height: 100%;">
+								<div class="group-box-item-set-body">
+									<div class="input-group">
+										<input class="form-control" colorpicker type="text" ng-model="colorBox.bgColor" ng-change="setBg();" placeholder="点击拾取颜色"/>
+										<a class="input-group-btn btn btn-primary left-noradius-btn" ng-click="recoverColor();">恢复默认颜色</a>
+									</div>
+									<div>
+										<div class="pt10"><label class="col-sm-3 control-label">分类：</label><span class="text text-primary">{{viewContent.viewTitle}}</span></div>
+										<div class="pt10"><label class="col-sm-3 control-label">名称：</label><span class="text text-primary">{{viewContent.viewText}}</span></div>
+									</div>
+								</div>
+								<div class="form-group">
+									<button class="col-sm-12 btn btn-lg btn-danger btn-block mb10" ng-click="delViewBtn();">
+										<i class="fa fa-trash"> 删除单元格视图</i>
+									</button>
+								</div>
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<div class="main-box-right-content-left" ng-show="!LAYOUT.collapsedSidebar">
+		<div class="box-border">
+			<div class="pd10 text-right">
+				<a style="cursor: pointer;" ng-click="goList();">组合视图列表 ></a>
+			</div>
+
+			<hr class="mt0 mb0" />
+			<div class="form-group pt10 pl10 pr10">
+				<div class="input-group">
+					<input class="form-control group-view-filter-input" ng-model="filter" placeholder="过滤视图">
+					<a class="input-group-btn btn btn-primary left-noradius-btn" ng-click="refresh();">刷新</a>
+				</div>
+
+				<div class="text-center pt15">
+					<div class="btn-group">
+						<label class="btn btn-primary ng-pristine ng-untouched ng-valid active guide2" ng-model="isPublic" btn-radio="false" ng-click="showPrivate();">私有视图</label>
+						<label class="btn btn-warning ng-pristine ng-untouched ng-valid guide3" ng-model="isPublic" btn-radio="true"  ng-click="showPublic  ();" href="javascript:;">公有视图</label>
+					</div>
+					<hr>
+				</div>
+				<!--<div class="col-md-8">-->
+					<!--<input class="form-control" ng-model="filter" placeholder="过滤视图"/>-->
+				<!--</div>-->
+				<!--<div class="col-md-4">-->
+					<!--&lt;!&ndash;<button type="submit" class="btn btn-primary">搜索</button>&ndash;&gt;-->
+					<!--<button type="submit" class="btn btn-primary btn-block btn-form" ng-click="refresh();">刷新</button>-->
+				<!--</div>-->
+
+			</div>
+
+			<div class="group-view psrl" ng-scroll="false,true">
+				<div class="group-view-item" ng-repeat="(index,item) in views | filter: {name: filter}" ng-scroll="">
+					<div class="group-view-item-body" ng-mouseover="item.show = true" ng-mouseleave="item.show = false">
+						<img id='{{item.id}}' data-title="{{item.categoryName}}" data-text="{{item.name}}" draggable="true" ondragstart="angular.element(this).scope().drag(event)" ng-src="{{static(item.imageUrl)}}" />
+						<div class="no-selected" ng-show="!item.show">
+							<h5 class="group-view-cate col-md-6">{{item.categoryName}}</h5>
+							<h6 class="group-view-cate col-md-6">{{item.name}}</h6>
+						</div>
+					</div>
+				</div>
+			</div>
+</div>
+
+</div>
+</div>

@@ -1,0 +1,967 @@
+package com.mmdb.util;
+
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+import java.util.Set;
+
+import org.directwebremoting.ScriptSession;
+import org.directwebremoting.WebContext;
+import org.directwebremoting.WebContextFactory;
+import org.directwebremoting.io.FileTransfer;
+import org.directwebremoting.proxy.dwr.Util;
+import org.dom4j.Document;
+import org.dom4j.DocumentException;
+import org.dom4j.DocumentHelper;
+import org.dom4j.Element;
+import org.dom4j.io.SAXReader;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.Return;
+import com.mmdb.core.utils.TimeUtil;
+import com.mmdb.model.categroy.CiCategory;
+import com.mmdb.model.categroy.RelCategory;
+import com.mmdb.model.database.bean.DataBaseConfig;
+import com.mmdb.model.database.bean.DataBaseSelf;
+import com.mmdb.model.database.bean.DataSourcePool;
+import com.mmdb.model.database.bean.Field;
+import com.mmdb.model.mapping.InCiCateMap;
+import com.mmdb.model.mapping.SourceToCategoryMapping;
+import com.mmdb.model.mapping.SourceToRelationMapping;
+import com.mmdb.service.category.ICiCateService;
+import com.mmdb.service.category.IRelCateService;
+import com.mmdb.service.db.IDataBaseConfigService;
+import com.mmdb.service.db.IDataSourceService;
+import com.mmdb.service.mapping.IInCiCateMapService;
+import com.mmdb.service.mapping.ISourceCategoryMapService;
+import com.mmdb.service.mapping.ISourceRelationMapService;
+
+public class MappingXMLUtil {
+
+	private static Log log = LogFactory.getLogger("MappingXMLUtil");
+
+	/**
+	 * 导出 DataBasePool 为 XML 文件
+	 * 
+	 * @param dbSourceService
+	 * @return
+	 * @throws Exception
+	 */
+	public static FileTransfer exportDataBasePoolToXML(
+			IDataSourceService dbSourceService) throws Exception {
+		log.dLog("exportDataBasePoolToXML");
+		Document document = DocumentHelper.createDocument();
+		// 添加<data>根标签
+		Element rootEle = document.addElement("DataBasePools");
+
+		List<DataSourcePool> dcs = dbSourceService.getAll();
+		Map<String, Map<String, Object>> retMap = new HashMap<String, Map<String, Object>>();
+		for (DataSourcePool nc : dcs) {
+			Map<String, Object> params = nc.asMap();
+			params.put("dcId", ((Map) params.get("dbMap")).get("id"));
+			params.remove("dbMap");
+			// retMap.put(nc.getId(), params);
+			Element dsEle = rootEle.addElement("DataBasePool");
+			for (String paramN : params.keySet()) {
+				if ("dcId".equals(paramN)) {
+					dsEle.addElement("dcId").addText(
+							params.get(paramN).toString());
+					continue;
+				}
+				if ("id".equals(paramN)) {
+					dsEle.addElement("id").addText(
+							params.get(paramN).toString());
+					continue;
+				}
+				// 添加<selfMap>标签及其子标签
+				if ("selfMap".equals(paramN)) {
+					Element selfEle = dsEle.addElement("selfMap");
+					Map<String, Object> self = (Map<String, Object>) params
+							.get("selfMap");
+					if (self != null && !self.isEmpty()) {
+						// 添加<selfMap>的子标签
+						for (String selfN : self.keySet()) {
+							Object object = self.get(selfN);
+							if ("fields".equals(selfN)) {
+								Element fieldsEle = selfEle
+										.addElement("fields");
+								Map<String, Map<String, Object>> fieldsVal = (Map<String, Map<String, Object>>) object;
+								for (String fieldsN : fieldsVal.keySet()) {
+									Map<String, Object> fieldsParam = fieldsVal
+											.get(fieldsN);
+									Element fieldEle = fieldsEle
+											.addElement(fieldsN);
+									fieldEle.addElement("hide")
+											.addText(
+													fieldsParam.get("hide") == null ? ""
+															: fieldsParam.get(
+																	"hide")
+																	.toString());
+									fieldEle.addElement("customType")
+											.addText(
+													fieldsParam
+															.get("customType") == null ? ""
+															: fieldsParam
+																	.get("customType")
+																	.toString());
+									fieldEle.addElement("name")
+											.addText(
+													fieldsParam.get("name") == null ? ""
+															: fieldsParam.get(
+																	"name")
+																	.toString());
+									fieldEle.addElement("type")
+											.addText(
+													fieldsParam.get("type") == null ? ""
+															: fieldsParam.get(
+																	"type")
+																	.toString());
+									fieldEle.addElement("customName")
+											.addText(
+													fieldsParam
+															.get("customName") == null ? ""
+															: fieldsParam
+																	.get("customName")
+																	.toString());
+								}
+								continue;
+							}
+							if (object != null) {
+								selfEle.addElement(selfN).addText(
+										object.toString());
+							} else {
+								selfEle.addElement(selfN).addText("");
+							}
+						}
+					}
+					continue;
+				}
+				if ("name".equals(paramN)) {
+					dsEle.addElement("name").addText(
+							params.get(paramN).toString());
+					continue;
+				}
+			}
+		}
+		// // 设置XML节点写入后保持较好的格式，需要创建一个格式对象
+		// OutputFormat prettyPrint = OutputFormat.createPrettyPrint();
+		// prettyPrint.setEncoding("UTF-8");
+		// // 获取XMLWriter对象
+		// // 创建临时文件夹
+		// File tmpFile = new File("tmp/xml");
+		// if (!tmpFile.isDirectory()) {
+		// tmpFile.mkdirs();
+		// }
+		// XMLWriter writer = new XMLWriter(new
+		// FileOutputStream("tmp/xml/~tmp.xml"), prettyPrint);
+		// document.normalize();
+		// // 将Document对象写入指定xml文件（XML/students_alert.xml）
+		// writer.write(document);
+		// // 关闭XMLWriter
+		// writer.close();
+		// InputStream inputStream = new FileInputStream("tmp/xml/~tmp.xml");
+		String filename = "数据集-" + TimeUtil.getTime(TimeUtil.YMDHMS) + ".xml";
+		log.dLog("exportDataBasePoolToXML success");
+		return new FileTransfer(new String(filename.getBytes("GBK"),
+				"iso8859-1"), "text/xml", new ByteArrayInputStream(document
+				.asXML().getBytes("utf-8")));
+	}
+
+	/**
+	 * 导入 DataBasePool
+	 * 
+	 * @param dbConfigService
+	 * @param dbSourceService
+	 * @param ftf
+	 * @return
+	 * @throws Exception
+	 */
+	public static Return importDataBasePoolXML(
+			IDataBaseConfigService dbConfigService,
+			IDataSourceService dbSourceService, FileTransfer ftf)
+			throws Exception {
+		Return ret = new Return();
+//		try {
+//			log.dLog("importDataBasePoolXML");
+//			if (ftf.getFilename() == null
+//					|| ftf.getFilename().equals("")
+//					|| ftf.getFilename().toLowerCase().trim().indexOf(".xml") == -1) {
+//				throw new Exception("文件格式有误");
+//			}
+//			Map<String, Map<String, Object>> xMap = parseDPXML(ftf
+//					.getInputStream());
+//			Iterator<Entry<String, Map<String, Object>>> iter = xMap.entrySet()
+//					.iterator();
+//			while (iter.hasNext()) {
+//				Entry<String, Map<String, Object>> entry = iter.next();
+//				Map<String, Object> val = entry.getValue();
+//				String id = val.get("id").toString();
+//				String dcId = val.get("dcId").toString();
+//				DataBaseConfig dc = dbConfigService.getById(dcId);
+//				if (dc == null) {
+//					throw new Exception("DataSource[" + dcId + "]不存在");
+//				}
+//				Map<String, Map<String, Object>> selfMap_ = (Map<String, Map<String, Object>>) val
+//						.get("selfMap");
+//				Object object = selfMap_.get("fields");
+//				Map<String, Map<String, Object>> fieldMap = (Map<String, Map<String, Object>>) object;
+//				selfMap_.remove("fields");
+//				Map<String, String> selfMap = new HashMap<String, String>();
+//				for (String key : selfMap_.keySet()) {
+//					selfMap.put(key, selfMap_.get(key) + "");
+//				}
+//				List<Field> fields = new ArrayList<Field>();
+//				if (fieldMap != null) {
+//					Iterator<Map.Entry<String, Map<String, Object>>> iterator = fieldMap
+//							.entrySet().iterator();
+//					while (iterator.hasNext()) {
+//						Map.Entry<String, Map<String, Object>> ent = iterator
+//								.next();
+//						Field field = new Field(entry.getKey(), (String) ent
+//								.getValue().get("customName"),
+//								Boolean.parseBoolean((String) ent.getValue()
+//										.get("hide")));
+//						fields.add(field);
+//					}
+//				}
+//				boolean isSelf = Boolean.valueOf(((Map) val.get("selfMap"))
+//						.get("isSelf").toString());
+//				DataBaseSelf ds = new DataBaseSelf(isSelf, selfMap, fields);
+//				DataSourcePool dp = dbSourceService.getById(id);
+//				if (dp == null) {
+//					dp = new DataSourcePool(id, dc, ds);
+//					dbSourceService.save(dp);
+//				} else {
+//					dp.setDc(dc);
+//					dp.setDs(ds);
+//					dbSourceService.update(dp);
+//				}
+//			}
+//			ret.setMessage("导入DataSet配置成功");
+//			log.dLog("importDataBasePoolXML success");
+//		} catch (Exception e) {
+//			log.eLog(e);
+//			ret.setSuccess(false).setMessage(e.getMessage());
+//		}
+		return ret;
+	}
+
+	/**
+	 * 解析 DataBasePool 的 XML 文件
+	 * 
+	 * @param inputStream
+	 * @return
+	 * @throws DocumentException
+	 */
+	private static Map<String, Map<String, Object>> parseDPXML(
+			InputStream inputStream) throws DocumentException {
+		Map<String, Map<String, Object>> xMap = new HashMap<String, Map<String, Object>>();
+
+		SAXReader sax = new SAXReader();
+		Document document = sax.read(inputStream);
+
+		Element rootEle = document.getRootElement();
+		Iterator<Element> ele = rootEle.elementIterator();
+		// 获取<ds>标签集
+		while (ele.hasNext()) {
+			Element dsEle = ele.next();
+			List<Element> dpEles = dsEle.elements();
+			Map<String, Object> dp = new HashMap<String, Object>();
+			for (Element dpEle : dpEles) {
+				if ("selfMap".equals(dpEle.getName())) {
+					List<Element> selfEles = dpEle.elements();
+					Map<String, Object> self = new HashMap<String, Object>();
+					for (Element selfEle : selfEles) {
+						if ("fields".equals(selfEle.getName())) {
+							Map<String, Object> selfFields = new HashMap<String, Object>();
+							List<Element> fieldsEles = selfEle.elements();
+							for (Element fieldsEle : fieldsEles) {
+								Map<String, Object> fieldsParams = new HashMap<String, Object>();
+								for (Element fieldsParam : (List<Element>) fieldsEle
+										.elements()) {
+									fieldsParams.put(fieldsParam.getName(),
+											fieldsParam.getText());
+								}
+								selfFields.put(fieldsEle.getName(),
+										fieldsParams);
+							}
+							self.put("fields", selfFields);
+							continue;
+						}
+						self.put(selfEle.getName(), selfEle.getText());
+					}
+					dp.put(dpEle.getName(), self);
+					continue;
+				}
+				dp.put(dpEle.getName(), dpEle.getText());
+			}
+			xMap.put(dsEle.elementText("id"), dp);
+		}
+
+		return xMap;
+	}
+
+	/**
+	 * 导出 DataBaseConfig 为 XML 文件
+	 * 
+	 * @param dbConfigService
+	 * @return
+	 * @throws Exception
+	 */
+	public static FileTransfer exportDataBaseConfigToXML(
+			IDataBaseConfigService dbConfigService) throws Exception {
+		log.dLog("exportDataBaseConfigToXML");
+
+		Document document = DocumentHelper.createDocument();
+		// 添加<data>根标签
+		Element rootEle = document.addElement("DataBases");
+
+		List<DataBaseConfig> dbConfigs = dbConfigService.getAll();
+		Map<String, Map<String, String>> retMap = new HashMap<String, Map<String, String>>();
+		for (DataBaseConfig nc : dbConfigs) {
+			// retMap.put(nc.getId(), nc.asMap());
+			Map<String, String> map = nc.asMap();
+			Element dbEle = rootEle.addElement("DataBase");
+			for (String dbInfo : map.keySet()) {
+				dbEle.addElement(dbInfo).addText(map.get(dbInfo));
+			}
+		}
+
+		String filename = "数据库连接-" + TimeUtil.getTime(TimeUtil.YMDHMS) + ".xml";
+		log.dLog("exportDataBaseConfigToXML success");
+		return new FileTransfer(new String(filename.getBytes("GBK"),
+				"iso8859-1"), "text/xml", new ByteArrayInputStream(document
+				.asXML().getBytes("utf-8")));
+	}
+
+	/**
+	 * 导入 DataBaseConfig
+	 * 
+	 * @param dbConfigService
+	 * @param ftf
+	 * @return
+	 * @throws Exception
+	 */
+	public static Return importDataBaseConfigXML(
+			IDataBaseConfigService dbConfigService, FileTransfer ftf)
+			throws Exception {
+		Return ret = new Return();
+		try {
+			log.dLog("importDataBaseConfig");
+			if (ftf.getFilename() == null
+					|| ftf.getFilename().equals("")
+					|| ftf.getFilename().toLowerCase().trim().indexOf(".xml") == -1) {
+				throw new Exception("文件格式有误");
+			}
+			Map<String, Map<String, String>> xMap = parseDCXML(ftf
+					.getInputStream());
+			Iterator<Entry<String, Map<String, String>>> iter = xMap.entrySet()
+					.iterator();
+			while (iter.hasNext()) {
+				Entry<String, Map<String, String>> entry = iter.next();
+				String key = entry.getKey();
+				Map<String, String> val = entry.getValue();
+				boolean rac = Boolean.valueOf(val.get("isRac").toString());
+				DataBaseConfig dc = dbConfigService.getById(key);
+				if (dc == null) {
+					dc = new DataBaseConfig(rac, val);
+					dc.setId(key);
+					dbConfigService.save(dc);
+				} else {
+					String type = val.get("type");
+					String username = val.get("username");
+					String password = val.get("password");
+					if (rac) {
+						String addressUrl = val.get("url");
+						dc.setRacAddress(addressUrl);
+					} else {
+						String hostName = val.get("url");
+						int port = Integer.valueOf(val.get("port"));
+						String dataBaseName = val.get("database");
+						dc.setHostName(hostName);
+						if (type.equals("oracle") || type.equals("db2")) {
+							if (dataBaseName == null || dataBaseName.equals("")) {
+								throw new Exception("数据库[" + key + "]实例不能为空");
+							}
+							dc.setDatabaseName(dataBaseName);
+						}
+						dc.setPort(port);
+					}
+					dc.setRac(rac);
+					dc.setType(type);
+					dc.setUsername(username);
+					dc.setPassword(password);
+					dbConfigService.update(dc);
+				}
+			}
+			ret.setMessage("导入数据库配置成功");
+			log.dLog("importDataBaseConfig success");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	/**
+	 * 解析 DataBaseConfig 的 XML 文件
+	 * 
+	 * @param inputStream
+	 * @return
+	 * @throws DocumentException
+	 */
+	private static Map<String, Map<String, String>> parseDCXML(
+			InputStream inputStream) throws DocumentException {
+		Map<String, Map<String, String>> xMap = new HashMap<String, Map<String, String>>();
+		SAXReader sax = new SAXReader();
+		Document document = sax.read(inputStream);
+		Element rootEle = document.getRootElement();
+		List<Element> eles = rootEle.elements();
+		for (Element ele : eles) { // 获取 dcId 标签
+			Map<String, String> dbInfos = new HashMap<String, String>();
+			List<Element> dbInfoEles = ele.elements();
+			for (Element dbInfoEle : dbInfoEles) {
+				dbInfos.put(dbInfoEle.getName(), dbInfoEle.getText());
+			}
+			xMap.put(ele.elementText("name"), dbInfos);
+		}
+		return xMap;
+	}
+
+	/**
+	 * 导出 内部配置项分类映射 为XML
+	 * 
+	 * @param icmService
+	 * @return
+	 * @throws Exception
+	 */
+	public static FileTransfer exportInCiCateMapperXML(
+			IInCiCateMapService icmService) throws Exception {
+		log.dLog("exportXML");
+		List<InCiCateMap> relMaps = icmService.getAll();
+		Document document = DocumentHelper.createDocument();
+		// 添加<data>根标签
+		Element rootEle = document.addElement("InCiCateMappers");
+
+		Element inCateMapperEle = rootEle.addElement("InCiCateMapper");
+		Map<String, Object> rMap = new HashMap<String, Object>();
+		for (int i = 0; i < relMaps.size(); i++) {
+			rMap = relMaps.get(i).asMap();
+			Element lineEle = inCateMapperEle.addElement("line");
+			for (String r : rMap.keySet()) {
+				lineEle.addElement(r).addText(rMap.get(r).toString());
+			}
+		}
+
+		String filename = "外键关系映射-" + TimeUtil.getTime(TimeUtil.YMDHMS)
+				+ ".xml";
+		log.dLog("exportXML success");
+		return new FileTransfer(new String(filename.getBytes("GBK"),
+				"iso8859-1"), "text/xml", new ByteArrayInputStream(document
+				.asXML().getBytes("utf-8")));
+	}
+
+	/**
+	 * 导入 内部配置项分类映射
+	 * 
+	 * @param icmService
+	 * @param ciCateService
+	 * @param rcService
+	 * @param ftf
+	 * @return
+	 * @throws Exception
+	 */
+	public static Return importInCiCateMapperXML(
+			IInCiCateMapService icmService, ICiCateService ciCateService,
+			IRelCateService rcService, FileTransfer ftf) throws Exception {
+		Return ret = new Return();
+		try {
+			log.dLog("导入CI内部映射");
+			if (ftf.getFilename() == null
+					|| ftf.getFilename().equals("")
+					|| ftf.getFilename().toLowerCase().trim().indexOf(".xml") == -1) {
+				throw new Exception("文件格式有误");
+			}
+			String info = "";
+			WebContext webContext = WebContextFactory.get();
+			ScriptSession sessions = webContext.getScriptSession();
+			Util util = new Util(sessions);
+			Map<String, List<Map<String, Object>>> xMap = parseInCiCateMapperXMLToMap(ftf
+					.getInputStream());
+			for (String id : xMap.keySet()) {
+				if (id.equals("InCiCateMapper")) {
+					log.iLog("解析sheet[" + id + "]...");
+					util.addFunctionCall("pushInfoMsg", "解析sheet[" + id
+							+ "]..."); // pushInfoMsg为javascript函数
+					List<Map<String, Object>> data = xMap.get(id);
+					List<InCiCateMap> datas = new ArrayList<InCiCateMap>();
+					String mName, sCateId, sField, eCateId, eField;
+					String rId;
+					// InCiCateMap icm = null;
+
+					for (Map<String, Object> obj : data) {
+						mName = obj.get("映射名称").toString();
+						// icm = icmService.getByName(mName);
+						rId = obj.get("关系ID").toString();
+						sCateId = obj.get("起点分类ID").toString();
+						sField = obj.get("起点分类字段").toString();
+						eCateId = obj.get("终点分类ID").toString();
+						eField = obj.get("终点分类字段").toString();
+						CiCategory sCate = ciCateService.getById(sCateId);
+						CiCategory eCate = ciCateService.getById(eCateId);
+						RelCategory rc = rcService.getById(rId);
+						// TODO 关系属性值没有处理
+						InCiCateMap mp = new InCiCateMap(mName, rc, null,
+								sCate, eCate, sField, eField);
+						// if (icm != null) {
+						// mp.setNeo4jid(icm.getNeo4jid());
+						// }
+						datas.add(mp);
+					}
+					if (datas.size() > 0) {
+						log.iLog("保存/更新数据开始...");
+						util.addFunctionCall("pushInfoMsg", "保存/更新数据开始...");
+						for (InCiCateMap im : datas) {
+							if (icmService.exist(im.getName())) {
+								icmService.update(im);
+							} else {
+								icmService.save(im);
+							}
+						}
+						String in = "[" + id + "]保存(" + datas.size() + ")条新数据";
+						log.iLog(in);
+						util.addFunctionCall("pushInfoMsg", in);
+						info = info.equals("") ? info : info + "<br/>";
+						info += in;
+					}
+				}
+			}
+			log.dLog("导入内部映射完成");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	/**
+	 * 解析 内部配置项分类映射 XML
+	 * 
+	 * @param in
+	 * @return
+	 * @throws DocumentException
+	 */
+	private static Map<String, List<Map<String, Object>>> parseInCiCateMapperXMLToMap(
+			InputStream in) throws DocumentException {
+		Map<String, List<Map<String, Object>>> xMap = new HashMap<String, List<Map<String, Object>>>();
+		SAXReader sax = new SAXReader();
+		Document document = sax.read(in);
+		Element rootEle = document.getRootElement();
+		Iterator<Element> iterator = rootEle.elementIterator();
+		while (iterator.hasNext()) {
+			List<Map<String, Object>> lines = new ArrayList<Map<String, Object>>();
+			Element ele = iterator.next();
+			// 获取<line>标签集
+			List<Element> lineEles = ele.elements();
+			for (Element lineEle : lineEles) {
+				List<Element> lineValEles = lineEle.elements();
+				Map<String, Object> line = new HashMap<String, Object>();
+				for (Element lineValEle : lineValEles) {
+					line.put(lineValEle.getName(), lineValEle.getText());
+				}
+				lines.add(line);
+			}
+			xMap.put(ele.getName(), lines);
+		}
+		return xMap;
+	}
+
+	/**
+	 * 导出 数据映射 为 XML
+	 * 
+	 * @param sourceCategoryMapService
+	 * @return
+	 * @throws Exception
+	 */
+	public static FileTransfer exportSourceCategoryMapperXML(
+			ISourceCategoryMapService sourceCategoryMapService)
+			throws Exception {
+		log.dLog("exportXML");
+
+		Document document = DocumentHelper.createDocument();
+		// 添加<data>根标签
+		Element rootEle = document.addElement("SourceCategoryMappers");
+
+		List<SourceToCategoryMapping> ncs = sourceCategoryMapService.getAll();
+		Map<String, Map<String, Object>> retMap = new HashMap<String, Map<String, Object>>();
+		for (SourceToCategoryMapping nc : ncs) {
+			// 导出的文件中不需要dbMap和selfMap等
+			Map<String, Object> asMap = nc.asMap();
+			asMap.remove("dbMap");
+			asMap.remove("selfMap");
+			asMap.remove("数据库连接");
+			asMap.remove("分类名称");
+			retMap.put(nc.getId(), asMap);
+		}
+
+		for (String mapper : retMap.keySet()) {
+			Element mapperEle = rootEle.addElement("SourceCategoryMapper");
+			Map<String, Object> map = (Map<String, Object>) retMap.get(mapper);
+			Element mappingFieldEle = mapperEle.addElement("映射字段");
+			Map<String, String> mappingField = (Map<String, String>) map
+					.get("映射字段");
+			// 添加<映射字段>标签
+			for (String mappingFieldKey : mappingField.keySet()) {
+				Element mappingFieldKeyEle = mappingFieldEle
+						.addElement(mappingFieldKey);
+				mappingFieldKeyEle.addText(mappingField.get(mappingFieldKey));
+			}
+			// 添加<dataSource>标签
+			Element dataSourceEle = mapperEle.addElement("dataSource");
+			dataSourceEle.addText((String) map.get("dataSource"));
+			// 添加<映射名称>标签
+			Element mapperName = mapperEle.addElement("映射名称");
+			mapperName.addText((String) map.get("映射名称"));
+			// 添加<分类ID>标签
+			Element cateIdEle = mapperEle.addElement("分类ID");
+			cateIdEle.addText((String) map.get("分类ID"));
+		}
+
+		String filename = "数据库映射-" + TimeUtil.getTime(TimeUtil.YMDHMS) + ".xml";
+		log.dLog("exportXML success");
+
+		return new FileTransfer(new String(filename.getBytes("GBK"),
+				"iso8859-1"), "text/xml", new ByteArrayInputStream(document
+				.asXML().getBytes("utf-8")));
+	}
+
+	/**
+	 * 导入 数据映射
+	 * 
+	 * @param sourceCategoryMapService
+	 * @param cateService
+	 * @param dataSourceService
+	 * @param ftf
+	 * @return
+	 */
+	public static Return importSourceCategoryMapperXML(
+			ISourceCategoryMapService sourceCategoryMapService,
+			ICiCateService cateService, IDataSourceService dataSourceService,
+			FileTransfer ftf) {
+		Return ret = new Return();
+		try {
+			log.dLog("importXML");
+			if (ftf.getFilename() == null
+					|| ftf.getFilename().equals("")
+					|| ftf.getFilename().toLowerCase().trim().indexOf(".xml") == -1) {
+				throw new Exception("文件格式有误");
+			}
+			int num = 0;
+			WebContext webContext = WebContextFactory.get();
+			ScriptSession sessions = webContext.getScriptSession();
+			Util util = new Util(sessions);
+			util.addFunctionCall("pushInfoMsg", "正在解析XML，请等待...");
+			Map<String, Map<String, Object>> xMap = parseSourceCategoryMapperXMLToMap(ftf
+					.getInputStream());
+			Iterator<Entry<String, Map<String, Object>>> iter = xMap.entrySet()
+					.iterator();
+			while (iter.hasNext()) {
+				Entry<String, Map<String, Object>> entry = iter.next();
+				String key = entry.getKey();
+				util.addFunctionCall("pushInfoMsg",
+						"解析分类<span class='label label-success'>[" + key
+								+ "]</span>..."); // dwrtest为javascript函数
+				Map<String, Object> mapping = entry.getValue();
+				String dsId = mapping.get("dataSource").toString();
+				Map<String, String> fieldMap = (Map<String, String>) mapping
+						.get("映射字段");
+				String mappingId = mapping.get("映射名称").toString();
+				String cateId = mapping.get("分类ID").toString();
+				SourceToCategoryMapping dbmap = sourceCategoryMapService
+						.getById(mappingId);
+				DataSourcePool dataSource = dataSourceService.getById(dsId);
+				CiCategory ciCate = cateService.getById(cateId);
+				if (dataSource != null && ciCate != null) {
+					if (dbmap == null) {
+						dbmap = new SourceToCategoryMapping(mappingId,
+								dataSource, ciCate, fieldMap);
+						sourceCategoryMapService.save(dbmap);
+						util.addFunctionCall("pushInfoMsg", "保存映射[" + mappingId
+								+ "]完成");
+					} else {
+						// dbmap = dbmap.unLazy();
+						dbmap.setCate(ciCate);
+						dbmap.setDataSource(dataSource);
+						dbmap.setFieldMap(fieldMap);
+						sourceCategoryMapService.update(dbmap);
+						util.addFunctionCall("pushInfoMsg", "更新映射[" + mappingId
+								+ "]完成");
+					}
+					num++;
+				}
+			}
+			util.addFunctionCall("pushInfoMsg", "上传分类完成");
+			ret.setMessage("成功导入映射[" + num + "]条");
+			log.dLog("importXML success");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	/**
+	 * 解析 数据映射
+	 * 
+	 * @param in
+	 * @return
+	 * @throws DocumentException
+	 */
+	private static Map<String, Map<String, Object>> parseSourceCategoryMapperXMLToMap(
+			InputStream in) throws DocumentException {
+		Map<String, Map<String, Object>> xMap = new HashMap<String, Map<String, Object>>();
+		SAXReader sax = new SAXReader();
+		Document document = sax.read(in);
+		Element rootEle = document.getRootElement();
+		Iterator iterator = rootEle.elementIterator();
+		while (iterator.hasNext()) {
+			Element ele = (Element) iterator.next();
+			Map<String, Object> mapper = new HashMap<String, Object>();
+			Element mappingFieldEle = ele.element("映射字段");
+			Map<String, String> mappingField = new HashMap<String, String>();
+			List<Element> mappingFieldEles = mappingFieldEle.elements();
+			for (Element element : mappingFieldEles) {
+				mappingField.put(element.getName(), element.getText());
+			}
+			mapper.put("映射字段", mappingField);
+			mapper.put("dataSource", ele.element("dataSource").getText());
+			mapper.put("映射名称", ele.element("映射名称").getText());
+			mapper.put("分类ID", ele.element("分类ID").getText());
+			xMap.put(ele.elementText("映射名称"), mapper);
+		}
+		return xMap;
+	}
+
+	/**
+	 * 导出 数据库关系映射 为 XML
+	 * 
+	 * @return
+	 * @throws Exception
+	 */
+	public static FileTransfer exportSourceRelationMapperXML(
+			ISourceRelationMapService sourceRelationMapService)
+			throws Exception {
+		log.dLog("exportXML");
+
+		Document document = DocumentHelper.createDocument();
+		// 添加<data>根标签
+		Element rootEle = document.addElement("SourceRelationMappers");
+
+		List<SourceToRelationMapping> ncs = sourceRelationMapService.getAll();
+		Map<String, Map<String, Object>> retMap = new HashMap<String, Map<String, Object>>();
+		for (SourceToRelationMapping nc : ncs) {
+			retMap.put(nc.getId(), nc.asMap());
+		}
+		for (String mapper : retMap.keySet()) {
+			Element mapperEle = rootEle.addElement("SourceRelationMapper");
+			Map<String, Object> map = (Map<String, Object>) retMap.get(mapper);
+			Element mappingFieldEle = mapperEle.addElement("数据库连接");
+			mappingFieldEle.addText((String) map.get("数据库连接"));
+			Element dbMapEle = mapperEle.addElement("dbMap");
+			Map<String, String> dbMap = (Map<String, String>) map.get("dbMap");
+			for (String db : dbMap.keySet()) {
+				Element dbEle = dbMapEle.addElement(db);
+				dbEle.addText(dbMap.get(db));
+			}
+			Element selfMapEle = mapperEle.addElement("selfMap");
+			Map<String, Object> selfMap = (Map<String, Object>) map
+					.get("selfMap");
+			for (String self : selfMap.keySet()) {
+				Element selfEle = selfMapEle.addElement(self);
+				Object object = selfMap.get(self);
+				if (object != null) {
+					selfEle.addText(object.toString());
+				} else {
+					selfEle.addText("");
+				}
+			}
+			Set<String> keySet = map.keySet();
+			for (String key : keySet) {
+				Object object = map.get(key);
+				if (object == null) {
+					map.put(key, "");
+				}
+			}
+			Element relNameEle = mapperEle.addElement("relName");
+			relNameEle.addText(map.get("relName").toString());
+			Element mapperName = mapperEle.addElement("映射名称");
+			mapperName.addText(map.get("映射名称").toString());
+			Element scateEle = mapperEle.addElement("sourceCateId");
+			scateEle.addText(map.get("sourceCateId").toString());
+			Element tcateEle = mapperEle.addElement("targetCateId");
+			tcateEle.addText(map.get("targetCateId").toString());
+			Element relValEle = mapperEle.addElement("关系属性值");
+			relValEle.addText(map.get("关系属性值").toString());
+			Element relIdEle = mapperEle.addElement("relId");
+			relIdEle.addText(map.get("relId").toString());
+			Element sFieldEle = mapperEle.addElement("sourceField");
+			sFieldEle.addText(map.get("sourceField").toString());
+			Element sCateEle = mapperEle.addElement("sourceCateName");
+			sCateEle.addText(map.get("sourceCateName").toString());
+			Element tCateEle = mapperEle.addElement("targetCateName");
+			tCateEle.addText(map.get("targetCateName").toString());
+			Element tFieldEle = mapperEle.addElement("targetField");
+			tFieldEle.addText(map.get("targetField").toString());
+		}
+
+		String filename = "外表关系映射-" + TimeUtil.getTime(TimeUtil.YMDHMS)
+				+ ".xml";
+		log.dLog("exportXML success");
+
+		return new FileTransfer(new String(filename.getBytes("GBK"),
+				"iso8859-1"), "text/xml", new ByteArrayInputStream(document
+				.asXML().getBytes("utf-8")));
+	}
+
+	/**
+	 * 导入 数据库关系映射
+	 * 
+	 * @param ftf
+	 * @return
+	 */
+	public static Return importSourceRelationMapperXML(
+			IRelCateService rcService, ICiCateService ciCateService,
+			IDataSourceService dataSourceService,
+			ISourceRelationMapService sourceRelationMapService, FileTransfer ftf) {
+		Return ret = new Return();
+		try {
+			log.dLog("importXML");
+			if (ftf.getFilename() == null
+					|| ftf.getFilename().equals("")
+					|| ftf.getFilename().toLowerCase().trim().indexOf(".xml") == -1) {
+				throw new Exception("文件格式有误");
+			}
+			int num = 0;
+			// taskService.deleteAll();
+			// sourceRelationMapService.deleteAll();
+			WebContext webContext = WebContextFactory.get();
+			ScriptSession sessions = webContext.getScriptSession();
+			Util util = new Util(sessions);
+			util.addFunctionCall("pushInfoMsg", "正在解析XML，请等待...");
+			Map<String, Map<String, Object>> xMap = parseSourceRelationMapperXMLToMap(ftf
+					.getInputStream());
+			Iterator<Entry<String, Map<String, Object>>> iter = xMap.entrySet()
+					.iterator();
+			while (iter.hasNext()) {
+				Entry<String, Map<String, Object>> entry = iter.next();
+				String key = entry.getKey();
+				util.addFunctionCall("pushInfoMsg",
+						"解析分类<span class='label label-success'>[" + key
+								+ "]</span>..."); // dwrtest为javascript函数
+				Map<String, Object> mapping = entry.getValue();
+				String relId = mapping.get("relId").toString();
+				RelCategory rc = rcService.getById(relId);
+				Map<String, Object> relValue = null;
+				Object object = mapping.get("关系属性值");
+				if (mapping.get("关系属性值") != null
+						&& !"{}".equals(mapping.get("关系属性值"))) {
+					relValue = (Map<String, Object>) mapping.get("关系属性值");
+				} else {
+					relValue = null;
+				}
+				String scId = mapping.get("sourceCateId").toString();
+				CiCategory sc = ciCateService.getById(scId);
+				String ecId = mapping.get("targetCateId").toString();
+				CiCategory ec = ciCateService.getById(ecId);
+				String dpId = mapping.get("数据库连接").toString();
+				DataSourcePool dp = dataSourceService.getById(dpId);
+				String sourceField = mapping.get("sourceField").toString();
+				String targetField = mapping.get("targetField").toString();
+				SourceToRelationMapping srm = sourceRelationMapService
+						.getById(key);
+
+				if (dp != null && rc != null) {
+					if (srm == null) {
+						srm = new SourceToRelationMapping(key, rc, relValue,
+								sc, ec, dp, sourceField, targetField);
+						sourceRelationMapService.save(srm);
+					} else {
+						// srm = srm.unLazy();
+						srm.setRelCate(rc);
+						srm.setRelValue(relValue);
+						srm.setSourceCate(sc);
+						srm.setTargetCate(ec);
+						srm.setDataSource(dp);
+						srm.setSourceField(sourceField);
+						srm.setTargetField(targetField);
+						sourceRelationMapService.update(srm);
+						util.addFunctionCall("pushInfoMsg", "更新映射[" + key
+								+ "]完成");
+					}
+					num++;
+				}
+			}
+			util.addFunctionCall("pushInfoMsg", "上传分类完成");
+			ret.setMessage("成功导入映射[" + num + "]条");
+			log.dLog("importXML success");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	/**
+	 * 解析 数据库关系映射
+	 * 
+	 * @param in
+	 * @return
+	 * @throws DocumentException
+	 */
+	private static Map<String, Map<String, Object>> parseSourceRelationMapperXMLToMap(
+			InputStream in) throws DocumentException {
+		Map<String, Map<String, Object>> xMap = new HashMap<String, Map<String, Object>>();
+		SAXReader sax = new SAXReader();
+		Document document = sax.read(in);
+		Element rootEle = document.getRootElement();
+		Iterator iterator = rootEle.elementIterator();
+		while (iterator.hasNext()) {
+			Element ele = (Element) iterator.next();
+			Map<String, Object> mapper = new HashMap<String, Object>();
+			mapper.put("数据库连接", ele.element("数据库连接").getText());
+			Map<String, Object> dbMap = new HashMap<String, Object>();
+			List<Element> dbEles = ele.element("dbMap").elements();
+			for (Element dbEle : dbEles) {
+				dbMap.put(dbEle.getName(), dbEle.getText());
+			}
+			mapper.put("dbMap", dbMap);
+			Map<String, Object> selfMap = new HashMap<String, Object>();
+			List<Element> selfEles = ele.element("selfMap").elements();
+			for (Element selfEle : selfEles) {
+				selfMap.put(selfEle.getName(), selfEle.getText());
+			}
+			mapper.put("selfMap", selfMap);
+			mapper.put("relName", ele.element("relName").getText());
+			mapper.put("映射名称", ele.element("映射名称").getText());
+			mapper.put("sourceCateId", ele.element("sourceCateId").getText());
+			mapper.put("targetCateId", ele.element("targetCateId").getText());
+			mapper.put("关系属性值", ele.element("关系属性值").getText());
+			mapper.put("relId", ele.element("relId").getText());
+			mapper.put("sourceField", ele.element("sourceField").getText());
+			mapper.put("sourceCateName", ele.element("sourceCateName")
+					.getText());
+			mapper.put("targetCateName", ele.element("sourceCateName")
+					.getText());
+			mapper.put("targetField", ele.element("targetField").getText());
+			xMap.put(ele.elementText("映射名称"), mapper);
+		}
+		return xMap;
+	}
+
+}

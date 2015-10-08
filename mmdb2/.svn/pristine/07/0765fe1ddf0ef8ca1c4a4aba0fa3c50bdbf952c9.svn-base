@@ -1,0 +1,100 @@
+package com.mmdb.buz.mapping;
+
+import java.util.Map;
+
+import org.directwebremoting.io.FileTransfer;
+
+import com.mmdb.core.utils.Return;
+
+/**
+ * 内部 配置项分类映射 - 业务层
+ *
+ * @author XIE
+ */
+public interface IInCiCateMapBuz {
+    /**
+     * 获取内部分类映射
+     *
+     * @param id 映射名称(不可重复),null时获取全部
+     * @return
+     */
+    public Return get(String id);
+
+    /**
+     * 保存内部分类映射
+     *
+     * @param uName     映射名称
+     * @param rCateId   关系分类id
+     * @param relValue  关系类型属性值
+     * @param sCiCateId 配置项分类id 起点
+     * @param eCiCateId 配置项分类id 终点
+     * @param sField    配置项分类字段 起点
+     * @param eField    配置项分类字段 终点
+     * @return
+     */
+    public Return save(String uName, String rCateId, Map relValue,
+                       String sCiCateId, String eCiCateId, String sField, String eField);
+
+    /**
+     * 更新内部 配置项映射
+     *
+     * @param uName     映射名称
+     * @param rCateId   关系分类id
+     * @param relValue  关系类型属性值
+     * @param sCiCateId 配置项分类id 起点
+     * @param eCiCateId 配置项分类id 终点
+     * @param sField    配置项分类字段 起点
+     * @param eField    配置项分类字段 终点
+     * @return
+     */
+    public Return update(String uName, String rCateId, Map relValue,
+                         String sCiCateId, String eCiCateId, String sField, String eField);
+
+    /**
+     * 删除一个内部关系映射
+     *
+     * @param id 关系映射名称(不可重复)
+     * @return
+     */
+    public Return deleteByName(String id);
+
+    /**
+     * 立即执行一个内部关系映射
+     *
+     * @param id 关系映射名称(不可重复)
+     * @return
+     */
+    public Return runNowByName(String id);
+
+    /**
+     * 导出映射的XLS格式文件
+     *
+     * @return
+     */
+    public FileTransfer exportXls() throws Exception;
+
+    /**
+     * 导入映射的XLS格式文件
+     *
+     * @param ftf XLS格式文件
+     * @return
+     * @throws Exception
+     */
+    public Return importXls(FileTransfer ftf) throws Exception;
+
+    /**
+     * 导入映射的XML格式文件
+     * @param ftf
+     * @return
+     * @throws Exception
+     */
+	Return importXML(FileTransfer ftf) throws Exception;
+
+	/**
+	 * 导出映射的XML格式文件
+	 * @return
+	 * @throws Exception
+	 */
+	FileTransfer exportXML() throws Exception;
+
+}

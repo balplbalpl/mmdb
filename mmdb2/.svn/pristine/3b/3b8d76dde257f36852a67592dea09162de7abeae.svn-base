@@ -1,0 +1,242 @@
+package com.mmdb.model.info;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import com.mmdb.core.framework.neo4j.annotation.Space;
+import com.mmdb.model.categroy.UserCategory;
+import com.mmdb.model.categroy.ViewCategory;
+
+/**
+ * 用户分类下的数据
+ * @author TY
+ * @version 2015年5月24日
+ */
+@Space("userInfo")
+public class UserInformation {
+	  private static final long serialVersionUID = 1L;
+	  
+	    /**
+	     * 用户名
+	     */
+	    private String username;
+	    /**
+	     * 密码
+	     */
+	    private String password;
+	    /**
+	     * 所属分类
+	     */
+	    private UserCategory category;
+	    /**
+	     * 所属分类id
+	     */
+	    private String categoryId;
+	    
+	    /**
+	     * 新建的时间
+	     */
+	    private long createTime;
+	    /**
+	     * 更新的时间
+	     */
+	    private long updateTime;
+	    
+	    /**
+	     * 电话
+	     */
+	    private String phone;
+	    
+	    /**
+	     * 邮箱
+	     */
+	    private String email;
+	    
+//	    /**
+//	     *   Neo4j id
+//	     */
+//	    private Long neo4jid;
+	    
+	    /**
+	     * [默认构造函数]
+	     */
+		public UserInformation() {
+			
+		}
+
+		public UserInformation(String username, String password, String categoryId, long createTime,
+				long updateTime, String phone, String email) {
+			this.username = username;
+			this.password = password;
+			this.categoryId = categoryId;
+			this.createTime = createTime;
+			this.updateTime = updateTime;
+			this.phone = phone;
+			this.email = email;
+		}
+		
+		/**
+	     * 把数据内容转成map
+	     */
+	    public Map<String, Object> asMap() {
+	    	Map<String, Object> ret = new HashMap<String, Object>();
+	    	ret.put("username", this.getUsername());
+	    	ret.put("password", this.getPassword());
+	    	ret.put("categoryId", this.getCategoryId());
+	    	ret.put("createTime", this.getCreateTime());
+	    	ret.put("updateTime", this.getUpdateTime());
+	    	ret.put("phone", this.getPhone());
+	    	ret.put("emial", this.email);
+	    	return ret;
+	    }
+		
+	    	
+	    
+		@Override
+		public int hashCode() {
+			final int prime = 31;
+			int result = 1;
+			result = prime * result
+					+ ((category == null) ? 0 : category.hashCode());
+			result = prime * result
+					+ ((categoryId == null) ? 0 : categoryId.hashCode());
+			result = prime * result + (int) (createTime ^ (createTime >>> 32));
+			result = prime * result + ((email == null) ? 0 : email.hashCode());
+//			result = prime * result
+//					+ ((neo4jid == null) ? 0 : neo4jid.hashCode());
+			result = prime * result
+					+ ((password == null) ? 0 : password.hashCode());
+			result = prime * result + ((phone == null) ? 0 : phone.hashCode());
+			result = prime * result + (int) (updateTime ^ (updateTime >>> 32));
+			result = prime * result
+					+ ((username == null) ? 0 : username.hashCode());
+			return result;
+		}
+
+		@Override
+		public boolean equals(Object obj) {
+			if (this == obj)
+				return true;
+			if (obj == null)
+				return false;
+			if (getClass() != obj.getClass())
+				return false;
+			UserInformation other = (UserInformation) obj;
+			if (category == null) {
+				if (other.category != null)
+					return false;
+			} else if (!category.equals(other.category))
+				return false;
+			if (categoryId == null) {
+				if (other.categoryId != null)
+					return false;
+			} else if (!categoryId.equals(other.categoryId))
+				return false;
+			if (createTime != other.createTime)
+				return false;
+			if (email == null) {
+				if (other.email != null)
+					return false;
+			} else if (!email.equals(other.email))
+				return false;
+//			if (neo4jid == null) {
+//				if (other.neo4jid != null)
+//					return false;
+//			} else if (!neo4jid.equals(other.neo4jid))
+//				return false;
+			if (password == null) {
+				if (other.password != null)
+					return false;
+			} else if (!password.equals(other.password))
+				return false;
+			if (phone == null) {
+				if (other.phone != null)
+					return false;
+			} else if (!phone.equals(other.phone))
+				return false;
+			if (updateTime != other.updateTime)
+				return false;
+			if (username == null) {
+				if (other.username != null)
+					return false;
+			} else if (!username.equals(other.username))
+				return false;
+			return true;
+		}
+
+		public String getUsername() {
+			return username;
+		}
+
+		public void setUsername(String username) {
+			this.username = username;
+		}
+
+		public String getPassword() {
+			return password;
+		}
+
+		public void setPassword(String password) {
+			this.password = password;
+		}
+
+		public UserCategory getCategory() {
+			return category;
+		}
+
+		public void setCategory(UserCategory category) {
+			this.category = category;
+		}
+
+		public String getCategoryId() {
+			return categoryId;
+		}
+
+		public void setCategoryId(String categoryId) {
+			this.categoryId = categoryId;
+		}
+
+		public long getCreateTime() {
+			return createTime;
+		}
+
+		public void setCreateTime(long createTime) {
+			this.createTime = createTime;
+		}
+
+		public long getUpdateTime() {
+			return updateTime;
+		}
+
+		public void setUpdateTime(long updateTime) {
+			this.updateTime = updateTime;
+		}
+
+		public String getPhone() {
+			return phone;
+		}
+
+		public void setPhone(String phone) {
+			this.phone = phone;
+		}
+
+		public String getEmail() {
+			return email;
+		}
+
+		public void setEmail(String email) {
+			this.email = email;
+		}
+//
+//		public Long getNeo4jid() {
+//			return neo4jid;
+//		}
+//
+//		public void setNeo4jid(Long neo4jid) {
+//			this.neo4jid = neo4jid;
+//		}
+	    
+	    
+	    
+
+}

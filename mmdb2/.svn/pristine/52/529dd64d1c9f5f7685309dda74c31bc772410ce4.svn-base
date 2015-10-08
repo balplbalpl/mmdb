@@ -1,0 +1,11 @@
+<div class="timeLineBox">
+    <div class="showTimeBox">
+        <div class="timeLine-line"></div>
+        <div class="timeLine-dot-box">
+            <div class="timeLine-dot"  ng-repeat="i in initData" ng-style="{left:i.dotLeft,'background':i.level ? i.level:'#FFCE9B','cursor':i.event ? 'pointer':'default','boxShadow':i.shadow}" ng-click="i.event ? i.event() : undefined;i.on = !i.on;i.shadow =i.on ?  '0px 0px 8px #fff':'none'"  title="{i.title}"></div>
+        </div>
+        <div class="timeLine-time-box">
+            <div class="timeLine-time"  ng-repeat="i in initData" ng-style="{left:i.titleLeft}" title="{i.title}">{{i.title}}</div>
+        </div>
+    </div>
+</div>

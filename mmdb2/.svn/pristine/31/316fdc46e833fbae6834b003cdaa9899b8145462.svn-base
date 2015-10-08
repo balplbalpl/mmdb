@@ -1,0 +1,1450 @@
+package com.mmdb.buz.ruleEngine;
+
+import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
+
+import jxl.Cell;
+import jxl.Sheet;
+import jxl.Workbook;
+import jxl.write.Label;
+import jxl.write.WritableSheet;
+import jxl.write.WritableWorkbook;
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+import org.apache.commons.lang.StringUtils;
+import org.directwebremoting.annotations.RemoteMethod;
+import org.directwebremoting.annotations.RemoteProxy;
+import org.directwebremoting.io.FileTransfer;
+import org.springframework.beans.factory.annotation.Autowired;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.Return;
+import com.mmdb.service.ruleEngine.IRuleEngineService;
+
+@RemoteProxy(name = "ruleEngineBuz")
+public class RuleEngineImpl implements IRuleEngine {
+	private Log log = LogFactory.getLogger("RuleEngineImpl");
+	@Autowired
+	private IRuleEngineService ruleEngineService;
+
+	@Override
+	@RemoteMethod
+	public Return getTree() throws Exception {
+		Return ret = new Return();
+		try {
+			JSONArray result = ruleEngineService.getTree();
+			ret.setMessage("获取规则树成功，共[" + result.size() + "]条").setData(
+					result.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return getTreeNodeById(String id) throws Exception {
+		Return ret = new Return();
+		try {
+			JSONObject result = ruleEngineService.getTreeNodeById(id);
+			ret.setMessage("获取规则节点成功").setData(result.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return addTreeNode(String id, String name, String data)
+			throws Exception {
+		Return ret = new Return();
+		try {
+			JSONObject d = JSONObject.fromObject(data);
+			JSONArray result = ruleEngineService.addTreeNode(id, name, d);
+			ret.setMessage("添加规则节点成功，共[" + result.size() + "]条").setData(
+					result.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return delTreeNode(String id) throws Exception {
+		Return ret = new Return();
+		try {
+			JSONArray result = ruleEngineService.delTreeNode(id);
+			ret.setMessage("删除规则节点成功，共[" + result.size() + "]条").setData(
+					result.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return getCategoryIds() throws Exception {
+		Return ret = new Return();
+		try {
+			JSONArray result = ruleEngineService.getCategoryIds();
+			ret.setMessage("获取CategoryIds成功，共[" + result.size() + "]条")
+					.setData(result.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return getCiAttrs(String categoryId) throws Exception {
+		Return ret = new Return();
+		try {
+			JSONArray result = ruleEngineService.getCiAttrs(categoryId);
+			ret.setMessage("获取CI属性成功，共[" + result.size() + "]条").setData(
+					result.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return getIndis() throws Exception {
+		Return ret = new Return();
+		try {
+			JSONArray result = ruleEngineService.getIndis();
+			ret.setMessage("获取indis成功，共[" + result.size() + "]条").setData(
+					result.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.setSuccess(false).setMessage(e.getMessage());
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public void addIndi(String indi) throws Exception {
+		try {
+			ruleEngineService.addIndi(indi);
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+	}
+
+	@Override
+	@RemoteMethod
+	public Return importPerfRule(FileTransfer ftf, boolean save) {
+		// 1.名称不能有重复.
+		// 2.内容必须符合规范 val-kpi必须是val-kpi格式,ci-kpi必须是ci-kpi格式,ci-val必须是ci-val..
+		log.dLog("对导入的监控规则进行分析!");
+		Return ret = new Return();
+		if (ftf == null || !ftf.getFilename().endsWith(".xls")
+				&& !ftf.getFilename().endsWith(".xlsx")) {
+			ret.setSuccess(false).setMessage("上传文件格式不正确!");
+			log.eLog("上传文件不正确!");
+			return ret;
+		}
+		Workbook workbook = null;
+		InputStream inputStream = null;
+		try {
+			inputStream = ftf.getInputStream();
+			workbook = Workbook.getWorkbook(inputStream);
+			inputStream = null;
+		} catch (Exception e1) {
+			log.eLog(ftf.getFilename() + " 文件转换异常");
+			ret.setSuccess(false).setMessage("文件上传失败!");
+			e1.printStackTrace();
+			return ret;
+		}
+		Sheet sheet = workbook.getSheet(0);
+		int rows = sheet.getRows();
+		List<String[]> Alldata = new ArrayList<String[]>();
+
+		// 要求范围中不能有相同的如果有则直接失败(相同范围名,没有对应规则的忽略)
+		// 1.获取全部的数据,2判断数据范围中是否有相同的.
+		for (int i = 1; i < rows; i++) {// 0为标题行
+			Cell[] row = sheet.getRow(i);
+			// 0名称 1val-kpi 2ci-kpi 3ci-val
+			String[] data = new String[4];
+			if (row.length < 4) {// 特殊检查
+				if (row.length == 3) {
+					String name = row[0].getContents();
+					if (!StringUtils.isBlank(name)) {
+						data[0] = name;
+						data[1] = row[1].getContents();
+						data[2] = row[2].getContents();
+						data[3] = null;
+					}
+				} else if (row.length == 2) {
+					String name = row[0].getContents();
+					if (!StringUtils.isBlank(name)) {
+						data[0] = name;
+						data[1] = row[1].getContents();
+						data[2] = null;
+						data[3] = null;
+					}
+				}
+			} else {
+				String name = row[0].getContents();
+				if (!StringUtils.isBlank(name)) {
+					data[0] = name;
+					data[1] = row[1].getContents();
+					data[2] = row[2].getContents();
+					data[3] = row[3].getContents();
+				}
+			}
+			// if () {
+			Alldata.add(data);
+			// }
+		}
+		// 判断是否有重复的.
+		JSONObject errData = new JSONObject();
+		for (int i = 0; i < Alldata.size(); i++) {
+			String[] data = Alldata.get(i);
+			if (data == null) {
+				continue;
+			}
+			// rule为空时不做保留
+			if (data[1] == null && data[2] == null && data[3] == null) {
+				Alldata.set(i, null);
+				continue;
+			}
+
+			for (int j = i + 1; j < Alldata.size(); j++) {
+				String[] data2 = Alldata.get(j);
+				if (data2 == null) {
+					continue;
+				}
+				if (data[0].equals(data2[0])) {
+					if (data2[1] == null && data2[2] == null
+							&& data2[3] == null) {
+						Alldata.set(j, null);
+					} else {
+						Alldata.set(j, null);
+						ret.setSuccess(false);
+						// 出现重复.判断
+						String val = (String) errData.get(data[0] + " 出现重复");
+						if (val == null) {
+							errData.put(data[0] + " 出现重复", "重复位置为:" + (i + 2)
+									+ "行 , " + (j + 1) + "行 ");
+						} else {
+							errData.put(data[0] + " 出现重复", val + ", " + (j + 2)
+									+ "行 ");
+						}
+					}
+				}
+			}
+		}
+
+		if (!ret.success) {
+			log.eLog("发现重复名称,规则导入失败!");
+			ret.setData(errData);
+			ret.setMessage("规则名称不能重复,且不能为空!");
+			return ret;
+		}
+		log.dLog("未发现重复名称,开始对规则内容进行检测!");
+		List<String[]> importData = new ArrayList<String[]>();
+
+		// 用于判断具体的内容是否出错
+		for (int i = 0; i < Alldata.size(); i++) {
+			boolean flag = true;
+			String[] data = Alldata.get(i);
+			if (data == null) {
+				continue;
+			}
+			String key = "第 " + (i + 2) + "行 [" + data[0] + "]出现错误";
+			if (!StringUtils.isBlank(data[1])) {
+				if (!checkRule(data[1], 0)) {
+					flag = false;
+					errData.put(key, "val-kpi不符合规则");
+				}
+			}
+
+			if (!StringUtils.isBlank(data[2])) {
+				if (!checkRule(data[2], 1)) {
+					flag = false;
+					String val = (String) ret.get(key);
+					if (val == null) {
+						errData.put(key, "ci-kpi不符合规则");
+					} else {
+						errData.put(key, val + ",ci-kpi不符合规则");
+					}
+				}
+			}
+			if (!StringUtils.isBlank(data[3])) {
+				if (!checkRule(data[3], 2)) {
+					flag = false;
+					String val = (String) ret.get(key);
+					if (val == null) {
+						errData.put(key, "ci-val不符合规则");
+					} else {
+						errData.put(key, val + ",ci-val不符合规则");
+					}
+				}
+			}
+			if (flag) {
+				importData.add(data);
+			} else {
+				log.eLog(errData.get(key).toString());
+			}
+		}// end
+		ret.setData(errData);
+		ret.setMessage("错误数据共计" + errData.size() + "条");
+		if (save) {
+			if (!importData.isEmpty()) {
+				log.dLog("导入正确数据");
+				String isOk = ruleEngineService.importPerfRule(importData);
+				if (isOk == null) {
+					ret.setSuccess(false);
+					ret.setMessage("未知原因导入失败,请检测zookeeper数据库是否正常启动");
+					return ret;
+				}
+			} else {
+				ret.setSuccess(false);
+			}
+			log.dLog("错误数据共计" + errData.size() + "条,成功导入数据" + importData.size()
+					+ "条.");
+			ret.setMessage("错误数据共计" + errData.size() + "条,成功导入数据"
+					+ importData.size() + "条.");
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return importEventRule(FileTransfer ftf, boolean save) {
+		// 1.名称不能有重复.
+		// 2.内容必须符合规范
+		// ,val-event必须是val-event格式,ci-event必须是ci-event格式,ci-val必须是ci-val..
+		log.dLog("对导入的监控规则进行分析!");
+		Return ret = new Return();
+		if (ftf == null || !ftf.getFilename().endsWith(".xls")
+				&& !ftf.getFilename().endsWith(".xlsx")) {
+			ret.setSuccess(false).setMessage("上传文件格式不正确!");
+			log.eLog("上传文件不正确!");
+			return ret;
+		}
+		Workbook workbook = null;
+		InputStream inputStream = null;
+		try {
+			inputStream = ftf.getInputStream();
+			workbook = Workbook.getWorkbook(inputStream);
+			inputStream = null;
+		} catch (Exception e1) {
+			log.eLog(ftf.getFilename() + " 文件转换异常");
+			ret.setSuccess(false).setMessage("文件上传失败!");
+			e1.printStackTrace();
+			return ret;
+		}
+		Sheet sheet = workbook.getSheet(0);
+		int rows = sheet.getRows();
+		List<String[]> Alldata = new ArrayList<String[]>();
+
+		// 要求范围中不能有相同的如果有则直接失败(相同范围名,没有对应规则的忽略)
+		// 1.获取全部的数据,2判断数据范围中是否有相同的.
+		for (int i = 1; i < rows; i++) {// 0为标题行
+			Cell[] row = sheet.getRow(i);
+			// 0名称 1val-event 2ci-event 3ci-val
+			String[] data = new String[4];
+			if (row.length < 4) {// 特殊检查
+				if (row.length == 3) {
+					String name = row[0].getContents();
+					if (!StringUtils.isBlank(name)) {
+						data[0] = name;
+						data[1] = row[1].getContents();
+						data[2] = row[2].getContents();
+						data[3] = null;
+					}
+				} else if (row.length == 2) {
+					String name = row[0].getContents();
+					if (!StringUtils.isBlank(name)) {
+						data[0] = name;
+						data[1] = row[1].getContents();
+						data[2] = null;
+						data[3] = null;
+					}
+				}
+			} else {
+				String name = row[0].getContents();
+				if (!StringUtils.isBlank(name)) {
+					data[0] = name;
+					data[1] = row[1].getContents();
+					data[2] = row[2].getContents();
+					data[3] = row[3].getContents();
+				}
+			}
+			// if () {
+			Alldata.add(data);
+			// }
+		}
+		JSONObject errData = new JSONObject();
+		// 判断是否有重复的.
+		for (int i = 0; i < Alldata.size(); i++) {
+			String[] data = Alldata.get(i);
+			if (data == null) {
+				continue;
+			}
+			// rule为空时不做保留
+			if (data[1] == null && data[2] == null && data[3] == null) {
+				Alldata.set(i, null);
+				continue;
+			}
+
+			for (int j = i + 1; j < Alldata.size(); j++) {
+				String[] data2 = Alldata.get(j);
+				if (data2 == null) {
+					continue;
+				}
+				if (data[0].equals(data2[0])) {
+					if (data2[1] == null && data2[2] == null
+							&& data2[3] == null) {
+						Alldata.set(j, null);
+					} else {
+						Alldata.set(j, null);
+						ret.setSuccess(false);
+						// 出现重复.判断
+						String val = (String) ret.get(data[0] + " 出现重复");
+						if (val == null) {
+							errData.put(data[0] + " 出现重复", "重复位置为:" + (i + 2)
+									+ "行 , " + (j + 1) + "行 ");
+						} else {
+							errData.put(data[0] + " 出现重复", val + ", " + (j + 2)
+									+ "行 ");
+						}
+					}
+				}
+			}
+		}
+
+		if (!ret.success) {
+			log.eLog("发现重复名称,规则导入失败!");
+			ret.setData(errData);
+			ret.setMessage("规则名称不能重复,且不能为空!");
+			return ret;
+		}
+		log.dLog("未发现重复名称,开始对规则内容进行检测!");
+		List<String[]> importData = new ArrayList<String[]>();
+
+		// 用于判断具体的内容是否出错
+		for (int i = 0; i < Alldata.size(); i++) {
+			boolean flag = true;
+			String[] data = Alldata.get(i);
+			if (data == null) {
+				continue;
+			}
+			String key = "第 " + (i + 2) + "行 [" + data[0] + "]出现错误";
+			if (!StringUtils.isBlank(data[1])) {
+				if (!checkRule(data[1], 3)) {
+					flag = false;
+					errData.put(key, "val-event不符合规则");
+				}
+			}
+
+			if (!StringUtils.isBlank(data[2])) {
+				if (!checkRule(data[2], 4)) {
+					flag = false;
+					String val = (String) ret.get(key);
+					if (val == null) {
+						errData.put(key, "ci-event不符合规则");
+					} else {
+						errData.put(key, val + ",ci-event不符合规则");
+					}
+				}
+			}
+			if (!StringUtils.isBlank(data[3])) {
+				if (!checkRule(data[3], 2)) {
+					flag = false;
+					String val = (String) ret.get(key);
+					if (val == null) {
+						errData.put(key, "ci-val不符合规则");
+					} else {
+						errData.put(key, val + ",ci-val不符合规则");
+					}
+				}
+			}
+			if (flag) {
+				importData.add(data);
+			} else {
+				log.eLog(errData.get(key).toString());
+			}
+		}// end
+		ret.setData(errData);
+		ret.setMessage("错误数据共计" + errData.size() + "条");
+		if (save) {
+			if (!importData.isEmpty()) {
+				log.dLog("导入正确数据!");
+				String isOk = ruleEngineService.importEventRule(importData);
+				if (isOk == null) {
+					ret.setSuccess(false);
+					ret.setMessage("未知原因导入失败,请检测zookeeper数据库是否正常启动");
+					return ret;
+				}
+			} else {
+				ret.setSuccess(false);
+
+			}
+			log.dLog("错误数据共计" + errData.size() + "条,成功导入数据" + importData.size()
+					+ "条.");
+			ret.setMessage("错误数据共计" + errData.size() + "条,成功导入数据"
+					+ importData.size() + "条.");
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public FileTransfer exportPerfRule() {
+		List<String[]> exportPerfRule = ruleEngineService
+				.exportRule("/rule/perf");
+		// JSONArray rules = JSONArray.fromObject(exportPerfRule);
+
+		WritableWorkbook workbook = null;
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		try {
+			workbook = createWB(new String[] { "名称", "val-kpi", "ci-kpi",
+					"ci-val" }, out);
+			if (workbook == null) {
+				return null;
+			}
+			int row = 1;
+			WritableSheet sheet = workbook.getSheet(0);
+
+			for (String[] data : exportPerfRule) {
+				sheet.addCell(new Label(0, row, data[0]));
+				sheet.addCell(new Label(1, row, data[1]));
+				sheet.addCell(new Label(2, row, data[2]));
+				sheet.addCell(new Label(3, row, data[3]));
+				row++;
+			}
+
+			workbook.write();
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e);
+		} finally {
+			if (workbook != null) {
+				try {
+					workbook.close();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
+				"yyyy-MM-dd HH:mm:ss");
+		FileTransfer fileTransfer = new FileTransfer("MoniterRule"
+				+ simpleDateFormat.format(new Date()) + ".xls",
+				"application/msexcel", out.toByteArray());
+
+		return fileTransfer;
+	}
+
+	@Override
+	@RemoteMethod
+	public FileTransfer exportEventRule() {
+		List<String[]> exportPerfRule = ruleEngineService
+				.exportRule("/rule/event");
+
+		WritableWorkbook workbook = null;
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		try {
+			workbook = createWB(new String[] { "名称", "val-event", "ci-event",
+					"ci-val" }, out);
+			if (workbook == null) {
+				return null;
+			}
+			int row = 1;
+			WritableSheet sheet = workbook.getSheet(0);
+
+			for (String[] data : exportPerfRule) {
+				sheet.addCell(new Label(0, row, data[0]));
+				sheet.addCell(new Label(1, row, data[1]));
+				sheet.addCell(new Label(2, row, data[2]));
+				sheet.addCell(new Label(3, row, data[3]));
+				row++;
+			}
+
+			workbook.write();
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e);
+		} finally {
+			if (workbook != null) {
+				try {
+					workbook.close();
+				} catch (Exception e) {
+					e.printStackTrace();
+				}
+			}
+		}
+		SimpleDateFormat simpleDateFormat = new SimpleDateFormat(
+				"yyyy-MM-dd HH:mm:ss");
+		FileTransfer fileTransfer = new FileTransfer("AlarmRule"
+				+ simpleDateFormat.format(new Date()) + ".xls",
+				"application/msexcel", out.toByteArray());
+
+		return fileTransfer;
+	}
+
+	// @Override
+	// @RemoteMethod
+	// public Return getPerfRuleNames() {
+	// return getRuleNames("/rule/perf");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public Return getPerfRuleByName(String ruleName) {
+	// // map name,val-kpi,ci-kpi,ci-val
+	// // list<>
+	// return getRuleByName(ruleName, "/rule/perf");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public Return deletePerfRule(String ruleName) {
+	// return deleteRule(ruleName, "/rule/perf");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public Return insertPerfRule(String ruleName, String vkRule, String
+	// ckRule,
+	// String cvRule) {
+	// return insertRule(ruleName, vkRule, ckRule, cvRule, "/rule/perf");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public Return updatePerfRule(String ruleName, String vkRule, String
+	// ckRule,
+	// String cvRule) {
+	// return updateRule(ruleName, vkRule, ckRule, cvRule, "/rule/perf");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public boolean perfRuleExists(String ruleName) {
+	// return ruleExists(ruleName, "/rule/perf");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public Return getEventRuleNames() {
+	// return getRuleNames("/rule/event");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public Return getEventRuleByName(String ruleName) {
+	// return getRuleByName(ruleName, "/rule/event");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public Return deleteEventRule(String ruleName) {
+	// return deleteRule(ruleName, "/rule/event");
+	// }
+	//
+	// @Override
+	// public Return insertEventRule(String ruleName, String vkRule,
+	// String ckRule, String cvRule) {
+	// return insertRule(ruleName, vkRule, ckRule, cvRule, "/rule/event");
+	// }
+	//
+	// @Override
+	// public Return updateEventRule(String ruleName, String vkRule,
+	// String ckRule, String cvRule) {
+	// return updateRule(ruleName, vkRule, ckRule, cvRule, "/rule/event");
+	// }
+	//
+	// @Override
+	// @RemoteMethod
+	// public boolean eventRuleExists(String ruleName) {
+	// return ruleExists(ruleName, "/rule/event");
+	// }
+
+	@Override
+	@RemoteMethod
+	public boolean ruleExists(String ruleName, String rulePath) {
+		List<String[]> ruleDatas = ruleEngineService.getRuleDatas(rulePath);
+		for (String[] data : ruleDatas) {
+			if (ruleName.equals(data[0])) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return insertRule(String ruleName, String vkRule, String ckRule,
+			String cvRule, String rulePath) {
+		Return ret = new Return();
+		if (ruleExists(ruleName, rulePath)) {
+			log.eLog("规则[" + ruleName + "]已经存在!");
+			ret.setSuccess(false);
+			ret.setMessage("规则[" + ruleName + "]已经存在!");
+			return ret;
+		}
+		ret = updateRule(ruleName, vkRule, ckRule, cvRule, rulePath);
+		if (ret.success) {
+			ret.setMessage("规则[" + ruleName + "]添加成功!");
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return updateRule(String ruleName, String vkRule, String ckRule,
+			String cvRule, String rulePath) {
+		String path = rulePath.substring(rulePath.lastIndexOf('/') + 1,
+				rulePath.length());
+		if ("perf".equals(path)) {
+			path = "kpi";
+		}
+		Return ret = new Return();
+		JSONArray rule = new JSONArray();
+		rule.add(ruleName);
+
+		if (!StringUtils.isBlank(vkRule)) {
+			log.dLog("拼合val-" + path + "规则");
+			String vk = deRule(vkRule);
+			if (vk == null) {
+				ret.setMessage("规则[" + ruleName + "]添加失败!,val-" + path
+						+ "验证未通过!");
+				ret.setSuccess(false);
+				return ret;
+			}
+			rule.add(vk);
+		} else {
+			rule.add("");
+		}
+		if (!StringUtils.isBlank(ckRule)) {
+			log.dLog("拼合ci-" + path + "规则");
+			String ck = deRule(ckRule);
+			if (ck == null) {
+				ret.setMessage("规则[" + ruleName + "]添加失败!ci-" + path + "验证未通过!");
+				ret.setSuccess(false);
+				return ret;
+			}
+			rule.add(ck);
+		} else {
+			rule.add("");
+		}
+		if (!StringUtils.isBlank(cvRule)) {
+			log.dLog("拼合ci-val规则");
+			String cv = deRule(cvRule);
+			if (cv == null) {
+				ret.setMessage("规则[" + ruleName + "]添加失败!ci-val验证未通过!");
+				ret.setSuccess(false);
+				return ret;
+			}
+			rule.add(deRule(cvRule));
+		} else {
+			rule.add("");
+		}
+		boolean success = ruleEngineService.insertRule(rulePath + "/"
+				+ ruleName, rule);
+		if (success) {
+			ret.setMessage("规则[" + ruleName + "]修改成功!");
+			ret.setSuccess(true);
+		} else {
+			ret.setMessage("规则[" + ruleName + "]修改失败!");
+			ret.setSuccess(false);
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return deleteRule(String ruleName, String rulePath) {
+		Return ret = new Return();
+		List<String[]> ruleDatas = ruleEngineService.getRuleDatas(rulePath);
+		String[] ruleData = null;
+		for (String[] data : ruleDatas) {
+			if (ruleName.equals(data[0])) {
+				ruleData = data;
+				break;
+			}
+		}
+		ruleDatas = null;
+		if (ruleData == null) {
+			ret.setSuccess(true);
+			ret.setMessage("规则[" + ruleName + "]不存在!");
+			return ret;
+		}
+		boolean isDel = ruleEngineService.delete(ruleData[1]);
+		if (isDel) {
+			ret.setSuccess(true);
+			ret.setMessage("规则[" + ruleName + "]删除成功!");
+		} else {
+			ret.setSuccess(false);
+			ret.setMessage("规则[" + ruleName + "]删除失败!");
+		}
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return getRuleByName(String ruleName, String rulePath) {
+		Return ret = new Return();
+		List<String[]> ruleDatas = ruleEngineService.getRuleDatas(rulePath);
+		String[] ruleData = null;
+		for (String[] data : ruleDatas) {
+			if (ruleName.equals(data[0])) {
+				ruleData = data;
+				break;
+			}
+		}
+		if (ruleData == null) {
+			log.eLog("规则[" + ruleName + "]不存在!");
+			ret.setSuccess(false);
+			ret.setMessage("规则[" + ruleName + "]不存在!");
+			return ret;
+		}
+
+		JSONObject rule = ruleEngineService
+				.getRuleByName(ruleName, ruleData[1]);
+		// 将数据转化成需要的数据格式
+		if (rulePath.endsWith("perf")) {
+			rule.put("val-kpi", enRule(rule.getString("val-kpi")));
+			rule.put("ci-kpi", enRule(rule.getString("ci-kpi")));
+			rule.put("ci-val", enRule(rule.getString("ci-val")));
+		} else {
+			rule.put("val-event", enRule(rule.getString("val-kpi")));
+			rule.put("ci-event", enRule(rule.getString("ci-kpi")));
+			rule.put("ci-val", enRule(rule.getString("ci-val")));
+		}
+		ret.setSuccess(true);
+		ret.setData(rule);
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return getRuleNames(String rulePath) {
+		log.dLog("获取[" + rulePath + "]下全部规则名称!");
+		Return ret = new Return();
+		List<String[]> perfRuleData = ruleEngineService.getRuleDatas(rulePath);
+
+		JSONArray perfRuleNames = new JSONArray();
+		for (String[] data : perfRuleData) {
+			perfRuleNames.add(data[0]);
+		}
+		ret.setSuccess(true);
+		ret.setData(perfRuleNames);
+		ret.setMessage("获取" + perfRuleNames.size() + "条数据");
+		return ret;
+	}
+
+	@Override
+	@RemoteMethod
+	public Return removeAll(String rulePath) {
+		boolean delete = ruleEngineService.delete(rulePath);
+		if (delete) {
+			return new Return().setSuccess(true).setMessage("清空成功");
+		} else {
+			return new Return().setSuccess(false).setMessage("清空失败");
+		}
+	}
+
+	private WritableWorkbook createWB(String[] titles, OutputStream os) {
+		WritableWorkbook workbook = null;
+		try {
+			workbook = Workbook.createWorkbook(os);
+			WritableSheet sheet = workbook.createSheet("sheet1", 0);
+			Label label = null;
+			for (int i = 0; i < titles.length; i++) {
+				label = new Label(i, 0, titles[i]);
+				sheet.addCell(label);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e);
+		}
+		return workbook;
+	}
+
+	/**
+	 * 用于确认一条规则是否符合规范,在进行转化前应该先进行规则的确认
+	 * 
+	 * @param str
+	 *            复杂的规则
+	 * @param ruleType
+	 *            规则的类型 0代表kpi-val 1代表ci-kpi 2代表ci-val 3代表event-val 4代表ci-event
+	 * @return
+	 */
+	private boolean checkRule(String str, final int ruleType) {
+		if ("true".equals(str.trim())) {
+			return true;
+		}
+
+		boolean flag = false;
+		StringBuffer sb = new StringBuffer(str.trim());
+		int lb = -1;
+		int t = 0;
+		boolean isVal = false;
+		for (int i = 0; i < sb.length(); i++) {
+			char c = sb.charAt(i);
+			if (c == '\'') {
+				isVal = !isVal;
+			} else if (c == '(') {
+				if (!isVal) {
+					if (t == 0)
+						lb = i;
+					t++;
+				}
+			} else if (c == ')') {
+				if (!isVal) {
+					t--;
+					if (t == 0) {
+						flag = checkRule(sb.substring(lb + 1, i), ruleType);
+						if (!flag) {
+							return false;
+						}
+						sb.replace(lb, i + 1, "true");
+						i = i - (i - lb);
+					}
+				}
+			} else {
+				if (isVal) {
+					sb.setCharAt(i, '*');
+				}
+			}
+		}
+
+		// 通过递归去除全部的()
+		int orIndex = sb.lastIndexOf(" or ");
+		if (orIndex < 0) {
+			orIndex = sb.lastIndexOf(" OR ");
+		}
+		if (orIndex > 0) {
+			flag = checkRule(sb.substring(orIndex + 3, sb.length()), ruleType);
+			if (!flag) {
+				return false;
+			}
+			flag = checkRule(sb.substring(0, orIndex), ruleType);
+			if (!flag) {
+				return false;
+			}
+		} else {
+			int andIndex = sb.lastIndexOf(" and ");
+			if (andIndex < 0) {
+				andIndex = sb.lastIndexOf(" AND ");
+			}
+			if (andIndex > 0) {
+				flag = checkRule(sb.substring(0, andIndex), ruleType);
+				if (!flag) {
+					return false;
+				}
+				flag = checkRule(sb.substring(andIndex + 4, sb.length()),
+						ruleType);
+				if (!flag) {
+					return false;
+				}
+			} else {
+
+				while (true) {
+					if (sb.charAt(0) == '('
+							&& sb.charAt(sb.length() - 1) == ')') {
+						sb = new StringBuffer(sb.substring(1, sb.length() - 1));
+					} else {
+						break;
+					}
+				}
+
+				// 已经精简到一条数据了
+				switch (ruleType) {
+				case 0:
+					return isKpiValRule(str);
+				case 1:
+					return isCiKpiOrCiEventRule(str);
+				case 2:
+					return isCiValRule(str);
+				case 3:
+					return isEventValRule(str);
+				case 4:
+					return isCiEventRule(str);
+				default:
+					return false;
+				}
+			}
+		}
+		return true;
+	}
+
+	private boolean isKpiValRule(String str) {
+		String[] splitRule = splitARule(str);
+		if (splitRule == null) {
+			return false;
+		}
+		String exp1 = splitRule[0];
+		String exp2 = splitRule[1];
+		splitRule = null;
+
+		int exp1Ps = exp1.indexOf('.');
+		if (exp1Ps < 0) {
+			return false;
+		}
+		if (exp1.startsWith("kpi.") && exp1.length() != 4) {// kpi-val
+			if (exp2.startsWith("'") && exp2.endsWith("'")) {
+				return true;
+			} else {
+				return false;
+			}
+		}
+		return false;
+	}
+
+	private boolean isCiKpiOrCiEventRule(String str) {
+		String[] splitRule = splitARule(str);
+		if (splitRule == null) {
+			return false;
+		}
+		String exp1 = splitRule[0];
+		String exp2 = splitRule[1];
+		splitRule = null;
+		int exp1Ps = exp1.indexOf('.');
+		if (exp1Ps < 0) {
+			return false;
+		}
+		if ((exp1.trim().startsWith("kpi.") && exp1.length() != 4)
+				|| (exp1.trim().startsWith("event.") && exp1.length() != 6)) {// kpi-val
+			if (exp2.startsWith("'") && exp2.endsWith("'")) {
+				return false;
+			} else if (exp2.indexOf('.') > 1) {
+				return true;
+			}
+		} else if ((exp2.trim().startsWith("kpi.") && exp1.length() != 4)
+				|| (exp2.trim().startsWith("event.") && exp2.length() != 6)) {
+			if (exp1.indexOf(".") > 1) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean isEventValRule(String str) {
+		String[] splitRule = splitARule(str);
+		if (splitRule == null) {
+			return false;
+		}
+		String exp1 = splitRule[0];
+		String exp2 = splitRule[1];
+		splitRule = null;
+
+		int exp1Ps = exp1.indexOf('.');
+		if (exp1Ps < 0) {
+			return false;
+		}
+		if (exp1.startsWith("event.") && exp1.length() != 4) {// event-val
+			if (exp2.startsWith("'") && exp2.endsWith("'")) {
+				return true;
+			} else {
+				return false;
+			}
+		}
+		return false;
+	}
+
+	private boolean isCiEventRule(String str) {
+		String[] splitRule = splitARule(str);
+		if (splitRule == null) {
+			return false;
+		}
+		String exp1 = splitRule[0];
+		String exp2 = splitRule[1];
+		splitRule = null;
+		int exp1Ps = exp1.indexOf('.');
+		if (exp1Ps < 0) {
+			return false;
+		}
+		if (exp1.trim().startsWith("event.") && exp1.length() != 4) {// event-val
+			if (exp2.startsWith("'") && exp2.endsWith("'")) {
+				return false;
+			} else if (exp2.indexOf('.') > 1) {
+				return true;
+			}
+		} else if (exp2.trim().startsWith("event.") && exp1.length() != 4) {
+			if (exp1.indexOf(".") > 1) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private boolean isCiValRule(String str) {
+		String[] splitRule = splitARule(str);
+		if (splitRule == null) {
+			return false;
+		}
+		String exp1 = splitRule[0];
+		String exp2 = splitRule[1];
+		splitRule = null;
+
+		int exp1Ps = exp1.indexOf('.');
+		if (exp1Ps < 0) {
+			return false;
+		}
+		if (exp2.startsWith("'") && exp2.endsWith("'")) {
+			return true;
+		} else {
+			return false;
+		}
+	}
+
+	private String[] splitARule(String str) {
+		int opPs = str.indexOf("=");
+		if (opPs < 1) {
+			return null;
+		}
+		// String exp[0] = "", exp[1] = ""; exp[2]="~="
+		String[] exp = null;
+		char charAt = str.charAt(opPs - 1);
+		if (charAt == '~') {
+			if (str.charAt(opPs - 2) == '!') {
+				exp = new String[3];
+				exp[0] = str.substring(0, opPs - 2).trim();
+				exp[1] = str.substring(opPs + 1, str.length()).trim();
+				exp[2] = "!~=";
+			} else {
+				exp = new String[3];
+				exp[0] = str.substring(0, opPs - 1).trim();
+				exp[1] = str.substring(opPs + 1, str.length()).trim();
+				exp[2] = "~=";
+			}
+		} else if (charAt == '!') {
+			exp = new String[3];
+			exp[0] = str.substring(0, opPs - 1).trim();
+			exp[1] = str.substring(opPs + 1, str.length()).trim();
+			exp[2] = "!=";
+		} else {
+			exp = new String[3];
+			exp[0] = str.substring(0, opPs).trim();
+			exp[1] = str.substring(opPs + 1, str.length()).trim();
+			exp[2] = "=";
+		}
+		return exp;
+	}
+
+	/**
+	 * 将前台的数据拼合到一起
+	 * 
+	 * @param rulesStr
+	 *            List<Map<String,String>>
+	 * @return
+	 */
+	private String deRule(String rulesStr) {
+		if (StringUtils.isBlank(rulesStr)) {
+			return "";
+		}
+		JSONArray rules = null;
+		try {
+			rules = JSONArray.fromObject(rulesStr);
+		} catch (Exception e) {
+			return "";
+		}
+		StringBuffer sb = new StringBuffer();
+		for (int i = 0; i < rules.size(); i++) {
+			JSONObject rule = rules.getJSONObject(i);
+			String lineConnector = rule.getString("lineConnector");// and or
+			String connector = rule.getString("connector");// == != !~= ~=
+			String bBrackets = rule.getString("bBrackets");// 左括号
+			String backQuote = rule.getString("backQuote"); // 右括号
+			String kpiAttr = null;
+			String kpi = null;
+			String ci = null;
+			String ciAttr = null;
+			String direction = null;
+			String classify = null;
+			boolean isKpi = true;
+			try {
+				kpiAttr = rule.getString("kpiAttr");//
+			} catch (Exception e) {
+				try {
+					kpiAttr = rule.getString("eventAttr");//
+					isKpi = false;
+				} catch (Exception e1) {
+				}
+			}
+			try {
+				kpi = rule.getString("kpi");//
+			} catch (Exception e) {
+				try {
+					kpi = rule.getString("event");//
+					isKpi = false;
+				} catch (Exception e1) {
+				}
+			}
+			if (kpi != null) {
+				kpi = "\'" + kpi;
+				kpi = kpi + "\'";
+			}
+			try {
+				ci = rule.getString("ci"); //
+			} catch (Exception e) {
+			}
+			if (ci != null) {
+				ci = "\'" + ci;
+				ci = ci + "\'";
+			}
+			try {
+				ciAttr = rule.getString("ciAttr"); // ci属性
+			} catch (Exception e) {
+			}
+			try {
+				direction = rule.getString("direction"); // 方向 ci-kpi时使用
+			} catch (Exception e) {
+			}
+			try {
+				classify = rule.getString("classify"); // 分类
+			} catch (Exception e) {
+			}
+
+			sb.append(" " + lineConnector + " ");
+			sb.append(bBrackets);
+
+			if (i > 0) {
+				if (StringUtils.isBlank(lineConnector)) {
+					log.dLog("拼合规则失败!第" + (i + 1) + "行必须有 and 或 or做为两条语句的连接符!");
+					return null;
+				}
+			}
+
+			if (classify != null) {//
+				if (StringUtils.isBlank(classify)) {
+					log.dLog("拼合规则失败!第" + (i + 1) + "行分类不能为空!");
+					return null;
+				}
+				if (StringUtils.isBlank(ciAttr)) {
+					log.dLog("拼合规则失败!第" + (i + 1) + "行分类属性不能为空!");
+					return null;
+				}
+				if (kpiAttr != null) {// ci-kpi
+					if ("正向".equalsIgnoreCase(direction)) {// positive
+						sb.append(classify);
+						sb.append(".");
+						sb.append(ciAttr);
+						sb.append(connector);
+						if (isKpi) {
+							sb.append("kpi.");
+						} else {
+							sb.append("event.");
+						}
+						sb.append(kpiAttr);
+					} else {
+						if (isKpi) {
+							sb.append("kpi.");
+						} else {
+							sb.append("event.");
+						}
+						sb.append(kpiAttr);
+						sb.append(connector);
+						sb.append(classify);
+						sb.append(".");
+						sb.append(ciAttr);
+					}
+				} else {
+					sb.append(classify);
+					sb.append(".");
+					sb.append(ciAttr);
+					sb.append(connector);
+					sb.append(ci);
+				}
+			} else {// val-kpi
+				if (isKpi) {
+					sb.append("kpi.");
+				} else {
+					sb.append("event.");
+				}
+				sb.append(kpiAttr);
+				sb.append(connector);
+				sb.append(kpi);
+			}
+			sb.append(backQuote);
+		}
+		if (checkRule(sb.toString(), 0) || checkRule(sb.toString(), 1)
+				|| checkRule(sb.toString(), 2) || checkRule(sb.toString(), 3)
+				|| checkRule(sb.toString(), 4)) {
+			log.dLog("拼合规则成功!");
+			return sb.toString();
+		} else {
+			log.dLog("拼合规则失败!");
+			return null;
+		}
+	}
+
+	/**
+	 * 将规则(sql)转化为前台需要的格式
+	 * 
+	 * @param rule
+	 * @return List<List<String>>
+	 */
+	private String enRule(String rule) {
+		if (StringUtils.isBlank(rule)) {
+			return "";
+		}
+		JSONArray ret = new JSONArray();
+		boolean isVal = false;
+		int t = 0;
+		for (int i = 0; i < rule.length(); i++) {
+			char c = rule.charAt(i);
+			if (c == '\'') {
+				isVal = !isVal;
+			} else if (c == ' ' && !isVal && i < rule.length() - 4) {
+				if (rule.charAt(i + 1) == 'a' && rule.charAt(i + 2) == 'n'
+						&& rule.charAt(i + 3) == 'd'
+						&& rule.charAt(i + 4) == ' '
+						|| rule.charAt(i + 1) == 'A'
+						&& rule.charAt(i + 2) == 'N'
+						&& rule.charAt(i + 3) == 'D'
+						&& rule.charAt(i + 4) == ' '
+						|| rule.charAt(i + 1) == 'O'
+						&& rule.charAt(i + 2) == 'R'
+						&& rule.charAt(i + 3) == ' '
+						|| rule.charAt(i + 1) == 'o'
+						&& rule.charAt(i + 2) == 'r'
+						&& rule.charAt(i + 3) == ' ') {
+					ret.add(resolveRule(rule.substring(t, i)));
+					t = i;
+				}
+			}
+		}
+		if (t == 0) {
+			ret.add(resolveRule(rule));
+		} else {
+			ret.add(resolveRule(rule.substring(t, rule.length())));
+		}
+		return ret.toString();
+	}
+
+	/**
+	 * 将单个的数据分解成前台需要的格式
+	 * 
+	 * @param rule
+	 *            kpi.app = '60'''' and ''''00' ) and
+	 * @return List<String>
+	 */
+	private JSONObject resolveRule(String rule) {
+		JSONObject ret = new JSONObject();
+
+		// JSONArray ret = new JSONArray();
+		// for (int i = 0; i < 6; i++)
+		// ret.add("");
+		String[] exps = splitARule(rule);
+		ret.put("connector", exps[2]);
+		// ret.set(3, exps[2]);// op
+
+		if (exps[0].startsWith("OR") || exps[0].startsWith("or")) {
+			// ret.set(0, "or");
+			ret.put("lineConnector", "or");
+			exps[0] = exps[0].substring(2).trim();
+		} else if (exps[0].startsWith("AND") || exps[0].startsWith("and")) {
+			// ret.set(0, "and");
+			ret.put("lineConnector", "and");
+			exps[0] = exps[0].substring(3).trim();
+		}
+		int t = 0;
+		StringBuffer lb = new StringBuffer();
+		for (int i = 0; i < exps[0].length(); i++) {
+			if (exps[0].charAt(i) == ' ') {
+				t++;
+				continue;
+			} else if (exps[0].charAt(i) == '(') {
+				t++;
+				lb.append("(");
+			} else {
+				exps[0] = exps[0].substring(t);
+				// ret.set(1, lb.toString());//左括号
+				ret.put("bBrackets", lb.toString());
+				break;
+			}
+		}
+		t = 0;
+		StringBuffer rb = new StringBuffer();
+		for (int i = exps[1].length() - 1; i >= 0; i--) {
+			if (exps[1].charAt(i) == ' ') {
+				t++;
+				continue;
+			} else if (exps[1].charAt(i) == ')') {
+				t++;
+				rb.append(")");
+			} else {
+				exps[1] = exps[1].substring(0, exps[1].length() - t);
+				// ret.set(5, rb.toString());//右括号
+				ret.put("backQuote", rb.toString());
+				break;
+			}
+		}
+
+		if (exps[1].startsWith("'") && exps[1].endsWith("'")) {// ci-val.kpi-val
+			exps[1] = exps[1].substring(1, exps[1].length() - 1);
+			exps[1] = exps[1].replace("''", "'");
+			// xx-val|val-xx
+			if (exps[0].startsWith("kpi.") || exps[0].startsWith("event.")) {
+				// ret.set(2, exps[0]);// kpi.
+				// ret.set(4, exps[1]);// val
+				boolean isKpi = exps[0].startsWith("kpi.");
+				ret.put(isKpi ? "kpiAttr" : "eventAttr",
+						isKpi ? exps[0].substring(4) : exps[0].substring(6));
+				ret.put(isKpi ? "kpi" : "event", exps[1]);
+				return ret;
+			} else {
+				String[] split = exps[0].split("\\.");
+				ret.put("classify", split[0]);
+				ret.put("ciAttr", split[1]);
+				ret.put("ci", exps[1]);
+				return ret;
+			}
+		} else {// ci-kpi 正,反
+			if (exps[0].startsWith("kpi.") || exps[0].startsWith("event.")) {//
+				boolean isKpi = exps[0].startsWith("kpi.");
+				String[] split = exps[1].split("\\.");
+				ret.put("classify", split[0]);
+				ret.put("ciAttr", split[1]);
+				ret.put(isKpi ? "kpiAttr" : "eventAttr",
+						isKpi ? exps[0].substring(4) : exps[0].substring(6));
+				ret.put("direction", "反向");
+				return ret;
+			} else {
+				boolean isKpi = exps[1].startsWith("kpi.");
+				String[] split = exps[0].split("\\.");
+				ret.put("classify", split[0]);
+				ret.put("ciAttr", split[1]);
+
+				ret.put(isKpi ? "kpiAttr" : "eventAttr",
+						isKpi ? exps[1].substring(4) : exps[1].substring(6));
+				ret.put("direction", "正向");
+				return ret;
+			}
+		}
+	}
+}

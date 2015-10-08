@@ -1,0 +1,41 @@
+<div class="modal-header">
+	<h3 class="modal-title">{{title}}</h3>
+</div>
+<div class="modal-body">
+
+	<div class="row">
+		<div class="col-md-6">
+			<h4>选择保存位置</h4>
+			<hr />
+			<div graph-viewtree="viewtreeParams" class="graph-viewtree"></div>
+		</div>
+
+		<div class="col-md-6">
+			<h4>视图信息</h4>
+			<hr />
+			<form>
+				<div class="form-group">
+					<label>保存位置</label>
+					<input type="text" class="form-control disabled" placeholder="请从左边的树选择保存位置" ng-model="view.pos" readonly />
+				</div>
+
+				<div class="form-group">
+					<label>视图名称</label>
+					<input type="text" class="form-control" placeholder="视图名称" ng-model="view.name">
+				</div>
+
+				<div class="form-group">
+					<label>描述</label>
+					<textarea class="form-control" placeholder="视图描述" rows="5" ng-model="view.description"></textarea>
+				</div>
+
+			</form>
+		</div>
+	</div>
+
+</div>
+<div class="modal-footer">
+	<i class="fa fa-spin spinner" ng-show="isShowLoading"></i>
+	<button class="btn btn-primary" ng-class="{ 'disabled': isShowLoading }" ng-click="ok()">确定</button>
+	<button class="btn btn-warning" ng-click="$modal.close()">取消</button>
+</div>

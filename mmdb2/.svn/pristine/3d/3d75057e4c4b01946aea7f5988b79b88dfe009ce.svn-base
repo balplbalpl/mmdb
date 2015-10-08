@@ -1,0 +1,453 @@
+package com.mmdb.model.relation.storage;
+
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.neo4j.shell.util.json.JSONObject;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.categroy.UserCategory;
+import com.mmdb.model.categroy.ViewCategory;
+import com.mmdb.model.categroy.storage.UserCateStorage;
+import com.mmdb.model.categroy.storage.ViewCateStorage;
+import com.mmdb.model.db.neo4jdb.Neo4jDao;
+import com.mmdb.model.info.UserInformation;
+import com.mmdb.model.info.ViewInformation;
+import com.mmdb.model.info.ViewPortfolio;
+import com.mmdb.model.relation.UserViewRelation;
+import com.mmdb.util.HexString;
+import com.mmdb.util.Neo4jStringUtils;
+
+@Service("userViewRelStorage")
+public class UserViewRelStorage {
+	private Log log = LogFactory.getLogger("UserViewRelStorage");
+	
+	@Autowired
+	private UserCateStorage userCateStorage;
+	@Autowired
+	private ViewCateStorage viewCateStorage;
+	
+	
+	 /**
+     * 获取总数
+     * @return
+     * @throws Exception
+     */
+	public int count() throws Exception {
+    	int count = 0;
+		String CQL = "match (n:User2View) return count(n)";
+		count = (int) Neo4jDao.getDataLong(CQL);
+		return count;
+	}
+
+
+	/**
+	 * 批量删除
+	 * @param list
+	 * @throws Exception
+	 */
+	public void delete(List<UserViewRelation> list) throws Exception {
+		String trem = "";
+		for(UserViewRelation uv: list){
+			trem += " '"+ uv.getNeo4jid() + "',";
+		}
+		trem = trem.substring(0, trem.length()-1);
+		String CQL = "match (n:User)-[r:User2View]->(m:View) where id(r) in ["+trem+"] delete r";
+		Neo4jDao.getDataList(CQL);
+	}
+
+
+	/**
+	 * 单个删除
+	 * @param t
+	 * @throws Exception
+	 */
+	public void delete(UserViewRelation t) throws Exception {
+		String CQL = "match (n:User)-[r:User2View]->(m:View) where id(r)="+t.getNeo4jid()+" delete r";
+		Neo4jDao.getDataList(CQL);
+	}
+
+
+	/**
+	 * 删除全部
+	 * @throws Exception
+	 */
+	public void deleteAll() throws Exception {
+		String CQL = "match (n:User)-[r:User2View]->(m:View)  delete r";
+		Neo4jDao.getDataList(CQL);
+	}
+
+	
+	/**
+	 * 获取全部
+	 * @return
+	 * @throws Exception
+	 */
+	public List<UserViewRelation> getAll(UserInformation user) throws Exception {
+		return this.query("match(a:Ci)-[l:Ci2Ci]->(b:View) return a,l,b", 0, 1, 2,user);
+	}
+
+
+	
+//	public List<UserViewRelation> getByProperty(String key, Object value)
+//			throws Exception {
+//		// TODO Auto-generated method stub
+//		return super.getByProperty(key, value);
+//	}
+
+
+	
+	public UserViewRelation getOne(Long neo4jid ,UserInformation user) throws Exception {
+		String CQL = "match (n:User)-[r:User2View]->(m:View) where id(r) = "+neo4jid +" return a,l,b";
+		List<UserViewRelation> cvL = this.query(CQL, 0, 1, 2,user);
+		if(cvL.size() == 1){
+			return cvL.get(0);
+		}if(cvL.size() == 0){
+			throw new Exception("获取User-View关系["+neo4jid+"]不存在");
+		}else{
+			throw new Exception("获取User-View关系["+neo4jid+"]不唯一");
+		}
+	}
+
+
+//	public RelationshipType getRelationType(UserViewRelation t)
+//			throws Exception {
+//		// TODO Auto-generated method stub
+//		return super.getRelationType(t);
+//	}
+//
+//	
+//	public RelationshipType getRelationType2() throws ClassNotFoundException {
+//		// TODO Auto-generated method stub
+//		return super.getRelationType2();
+//	}
+
+
+
+	
+	public List<UserViewRelation> query(Object query) throws Exception {
+		List<UserViewRelation> cvL = new ArrayList<UserViewRelation>();
+		return cvL;
+	}
+
+	
+	public List<UserViewRelation> query(String bq, int start, int line, int end,UserInformation user) throws Exception {
+		List<UserCategory> all = userCateStorage.getAll();
+    	Map<String, UserCategory> allMap = new HashMap<String, UserCategory>();
+    	for(UserCategory cate:all){
+    		allMap.put(cate.getId(), cate);
+    	}
+    	List<List<JSONObject>> rels = Neo4jDao.getDataMulMap(bq);
+    	List<UserViewRelation> result = new ArrayList<UserViewRelation>();
+    	for(List<JSONObject> l:rels){
+    		JSONObject startMap = l.get(start);
+    		JSONObject lineMap = l.get(line);
+    		JSONObject endMap = l.get(end);
+    		
+    		UserViewRelation rel = new UserViewRelation();
+    		rel.setNeo4jid(Long.parseLong(lineMap.get("id")+""));
+    		
+    		UserInformation startCi = new UserInformation();
+//    		startCi.setNeo4jid(Long.parseLong(startMap.get("id")+""));
+    		String username = startMap.getJSONObject("data").has("username") ? startMap.getJSONObject("data").getString("username"):"";
+    		startCi.setUsername(username);
+    		startCi.setPassword(startMap.getJSONObject("data").has("password") ? startMap.getJSONObject("data").getString("password"):"");
+    		startCi.setPhone(startMap.getJSONObject("data").has("phone") ? startMap.getJSONObject("data").getString("phone"):"");
+    		startCi.setEmail(startMap.getJSONObject("data").has("email") ? startMap.getJSONObject("data").getString("email"):"");
+    		String startCate = startMap.getJSONObject("data").has("categoryId") ? startMap.getJSONObject("data").getString("categoryId"):"";
+    		startCi.setCategoryId(startCate);
+    		startCi.setCategory(allMap.get(startCate));
+    		startCi.setCreateTime(System.currentTimeMillis());
+    		startCi.setUpdateTime(System.currentTimeMillis());
+    		rel.setUser(startCi);
+    		
+    		ViewInformation endCi = new ViewInformation();
+    		if(endMap!=null&&endMap.length()>0){
+    			JSONObject currM = endMap.getJSONObject("data");
+    			endCi.setId(currM.getString("id"));
+    			endCi.setName(currM.getString("name"));
+    			endCi.setDescription(currM.getString("description"));
+    			endCi.setXml(currM.getString("xml"));
+    			endCi.setSvg(currM.getString("svg"));
+    			endCi.setImageUrl(currM.getString("imageUrl"));
+//    			endCi.setOpen(currM.getString("open"));
+    			endCi.setCreateTime(Long.parseLong(currM.get("createTime")+""));
+    			endCi.setUpdateTime(Long.parseLong(currM.get("updateTime")+""));
+    			endCi.setUserName(currM.getString("userName"));
+    			endCi.setCategoryId(currM.getString("categoryId"));
+    			endCi.setVersion(Integer.parseInt(currM.get("version")+""));
+//    			endCi.setNeo4jid(Long.parseLong(endMap.get("id")+""));
+    		}
+    		
+    		//获取ViewCate 放到ViewInfo中
+//    		endCi.setCategory(viewCateStorage.getById(endCi.getCategoryId(),user));
+    		
+    		rel.setView(endCi);
+    		rel.setId(startMap.get("id")+"_"+rel.getRelation()+"_"+endMap.get("id"));
+    		result.add(rel);
+    	}
+    	return result;
+	}
+
+	
+//	public List<UserViewRelation> queryByProperty(String key, Object value)
+//			throws Exception {
+//		// TODO Auto-generated method stub
+//		return super.queryByProperty(key, value);
+//	}
+
+
+	public UserViewRelation save(UserViewRelation relation,UserInformation user) throws Exception {
+		UserInformation startCi = relation.getUser();
+    	String startId = Neo4jStringUtils.cypherESC(startCi.getUsername());
+    	String startCate = Neo4jStringUtils.cypherESC(startCi.getCategoryId());
+    	ViewInformation endCi = relation.getView();
+    	String endId = Neo4jStringUtils.cypherESC(endCi.getId());
+    	String endCate = Neo4jStringUtils.cypherESC(endCi.getCategoryId());
+    	
+//    	String relType = Neo4jStringUtils.cypherESC(startCi.getNeo4jid()+"_"+relation.getRelation()+"_"+endCi.getNeo4jid());
+    	String relType = HexString.encode(HexString.json2Str(startCi.getCategoryId(), startCi.getUsername())) + "_USER2VIEW_" + HexString.encode(HexString.json2Str(endCi.getCategoryId(),endCi.getId()));
+    	
+    	String cypher = "match(a:User {`id`:'"+startId+"',`categoryId`:'"+startCate+"'})," +
+    					"(b:View{`id`:'"+endId+"',`categoryId`:'"+endCate+"'})" +
+    					" merge (a)-[l:User2View{id:'"+relType+"'}]->(b) "+
+    					"set l.`startCate`='"+startCate+"',l.`startCi`='"+startId+"'," +
+    					"l.`endCate`='"+endCate+"',l.`endCi`='"+endId+"'";
+    	Neo4jDao.executeNoRest(cypher);
+    	
+    	return getById(relType,user);
+	}
+
+	
+//	public void setIndex(RelationIndex index) {
+//		// TODO Auto-generated method stub
+//		super.setIndex(index);
+//	}
+
+	
+	public UserViewRelation update(Long id, UserViewRelation t,UserInformation user) throws Exception {
+		t.setNeo4jid(id);
+    	delete(t);
+        return save(t,user);
+	}
+
+
+	public UserViewRelation update(UserViewRelation t,UserInformation user) throws Exception {
+		delete(t);
+		return save(t,user);
+	}
+
+
+
+
+	/**
+	 * 根据id获取用户和视图的关系
+	 * 
+	 * @param id
+	 *            分类id（当前分类中唯一）
+	 * @return
+	 * @throws Exception
+	 */
+	public UserViewRelation getById(String id,UserInformation user) throws Exception {
+		id = Neo4jStringUtils.cypherESC(id);
+		String CQL = "match (a:User)-[l:User2View]->(b:View)  where l.`id` = '"+id+"' return a,l,b";
+		List<UserViewRelation> cvL = this.query(CQL, 0, 1, 2,user);
+		if(cvL.size() == 1){
+			return cvL.get(0);
+		}if(cvL.size() == 0){
+			throw new Exception("获取User-View关系["+id+"]不存在");
+		}else{
+			throw new Exception("获取User-View关系["+id+"]不唯一");
+		}
+	}
+	
+	
+
+//	/**
+//	 * 创建User到View的是否可见关系  
+//	 * @param [ucL user] Cate 用户分类集合
+//	 * @param [uiL user] Info 用户信息集合   uiL不为空时以uiL为准
+//	 * @param [vcL ci] Cate View分类集合
+//	 * @param [viL ci] Info View信息集合  viL不为空时以viL为准
+//	 * @return
+//	 */
+//	public void UserCateToViewCate(List<String> ucL,List<String> uiL,List<String> vcL,List<String> viL,List<String> pviL){
+//		StringBuffer CQLmatch = new StringBuffer(); //接收所有查询语句
+//		StringBuffer CQLcreate = new StringBuffer();//接收所有创建关系的语句
+//		int loop = 1;
+//		if(uiL == null && viL == null){ //分类指向分类
+//			for(int i=0;i<ucL.size();i++){
+//				String uc = Neo4jStringUtils.cypherESC(ucL.get(i));
+//				for(int j=0;j<vcL.size();j++){
+//					String n = "n"+loop;
+//					String m = "m"+loop;
+//					String vc = Neo4jStringUtils.cypherESC(vcL.get(j));
+//					CQLmatch.append("match ("+n+":UserCate) where "+n+".`id` = '"+uc+"' match ("+m+":ViewCate) where "+m+".`id` = '"+vc+"' ");
+//					CQLcreate.append("merge ("+n+")-[:UserCate2ViewCate]->("+m+") ");
+//					loop++;
+//				}
+//			}
+//		}else if(uiL != null && viL == null){ //user指向分类
+//			for(int i=0;i<uiL.size();i++){
+//				String ui = Neo4jStringUtils.cypherESC(uiL.get(i));
+//				for(int j=0;j<vcL.size();j++){
+//					String n = "n"+loop;
+//					String m = "m"+loop;
+//					String vc = Neo4jStringUtils.cypherESC(vcL.get(j));
+//					CQLmatch.append("match ("+n+":User) where "+n+".`uesrname` = '"+ui+"' match ("+m+":ViewCate) where "+m+".`id` = '"+vc+"' ");
+//					CQLcreate.append("merge ("+n+")-[:User2ViewCate]->("+m+") ");
+//					loop++;
+//				}
+//			}
+//		}else if(uiL == null && viL != null){ // 分类指向Ci
+//			for(int i=0;i<ucL.size();i++){
+//				String uc = Neo4jStringUtils.cypherESC(ucL.get(i));
+//				for(int j=0;j<viL.size();j++){
+//					String n = "n"+loop;
+//					String m = "m"+loop;
+//					String vi = Neo4jStringUtils.cypherESC(viL.get(j));
+//					CQLmatch.append("match ("+n+":UserCate) where "+n+".`id` = '"+uc+"' match ("+m+":View) where "+m+".`id` = '"+vi+"' ");
+//					CQLcreate.append("merge ("+n+")-[:UserCate2View]->("+m+") ");
+//					loop++;
+//				}
+//			}
+//		}else if(uiL != null && viL != null){ //user指向Ci
+//			for(int i=0;i<uiL.size();i++){
+//				String ui = Neo4jStringUtils.cypherESC(uiL.get(i));
+//				for(int j=0;j<viL.size();j++){
+//					String n = "n"+loop;
+//					String m = "m"+loop;
+//					String vi = Neo4jStringUtils.cypherESC(viL.get(j));
+//					CQLmatch.append("match ("+n+":User) where "+n+".`uesrname` = '"+ui+"' match ("+m+":View) where "+m+".`id` = '"+vi+"' ");
+//					CQLcreate.append("merge ("+n+")-[:User2View]->("+m+") ");
+//					loop++;
+//				}
+//			}
+//		}else if(uiL == null && pviL != null){ //user指向Ci
+//			for(int i=0;i<ucL.size();i++){
+//				String uc = Neo4jStringUtils.cypherESC(ucL.get(i));
+//				for(int j=0;j<viL.size();j++){
+//					String n = "n"+loop;
+//					String m = "m"+loop;
+//					String vi = Neo4jStringUtils.cypherESC(pviL.get(j));
+//					CQLmatch.append("match ("+n+":UserCate) where "+n+".`id` = '"+uc+"' match ("+m+":View) where "+m+".`id` = '"+vi+"' ");
+//					CQLcreate.append("merge ("+n+")-[:UserCate2ViewPtfl]->("+m+") ");
+//					loop++;
+//				}
+//			}
+//		}else if(uiL != null && pviL != null){ //user指向Ci
+//			for(int i=0;i<uiL.size();i++){
+//				String ui = Neo4jStringUtils.cypherESC(uiL.get(i));
+//				for(int j=0;j<viL.size();j++){
+//					String n = "n"+loop;
+//					String m = "m"+loop;
+//					String vi = Neo4jStringUtils.cypherESC(pviL.get(j));
+//					CQLmatch.append("match ("+n+":User) where "+n+".`uesrname` = '"+ui+"' match ("+m+":View) where "+m+".`id` = '"+vi+"' ");
+//					CQLcreate.append("merge ("+n+")-[:User2ViewPtfl]->("+m+") ");
+//					loop++;
+//				}
+//			}
+//		}
+//		String CQL = CQLmatch.append(CQLcreate)+"";
+//		Neo4jDao.executeNoRest(CQL);
+//		
+//	}
+	
+	
+	/**
+	 * 创建User到View的是否可见关系  
+	 * @param [ucL user] Cate 用户分类集合
+	 * @param [uiL user] Info 用户信息集合   uiL不为空时以uiL为准
+	 * @param [vcL ci] Cate View分类集合
+	 * @param [viL ci] Info View信息集合  viL不为空时以viL为准
+	 * @return
+	 */
+	public void UserCateToViewCateM(List<UserCategory> ucL,List<UserInformation> uiL,List<ViewCategory> vcL,List<ViewInformation> viL,List<ViewPortfolio> pviL){
+		StringBuffer CQLmatch = new StringBuffer(); //接收所有查询语句
+		StringBuffer CQLcreate = new StringBuffer();//接收所有创建关系的语句
+		int loop = 1;//循环参数
+		if(uiL == null && viL == null){ //分类指向分类
+			for(int i=0;i<ucL.size();i++){
+				UserCategory uc = ucL.get(i);
+				for(int j=0;j<vcL.size();j++){
+					String n = "n"+loop;
+					String m = "m"+loop;
+					ViewCategory vc = vcL.get(j);
+					CQLmatch.append("match ("+n+":UserCate) where "+n+".id = '"+Neo4jStringUtils.cypherESC(uc.getId())+"' match ("+m+":ViewCate) where "+m+".id = '"+Neo4jStringUtils.cypherESC(vc.getId())+"' ");
+					CQLcreate.append("merge ("+n+")-[:UserCate2ViewCate]->("+m+") ");
+					loop++;
+				}
+			}
+		}else if(uiL != null && viL == null){ //user指向分类
+			for(int i=0;i<uiL.size();i++){
+				UserInformation ui = uiL.get(i);
+				for(int j=0;j<vcL.size();j++){
+					String n = "n"+loop;
+					String m = "m"+loop;
+					ViewCategory vc = vcL.get(j);
+					CQLmatch.append("match ("+n+":User) where "+n+".uesrname = '"+Neo4jStringUtils.cypherESC(ui.getUsername())+"' and "+n+".categoryId = '"+Neo4jStringUtils.cypherESC(ui.getCategoryId())+"'  match ("+m+":ViewCate) where "+m+".id = '"+Neo4jStringUtils.cypherESC(vc.getId())+"' ");
+					CQLcreate.append("merge ("+n+")-[:User2ViewCate]->("+m+") ");
+					loop++;
+				}
+			}
+		}else if(uiL == null && viL != null){ // 分类指向Ci
+			for(int i=0;i<ucL.size();i++){
+				UserCategory uc = ucL.get(i);
+				for(int j=0;j<viL.size();j++){
+					String n = "n"+loop;
+					String m = "m"+loop;
+					ViewInformation vi = viL.get(j);
+					CQLmatch.append("match ("+n+":UserCate) where "+n+".id = '"+Neo4jStringUtils.cypherESC(uc.getId())+"' match ("+m+":View) where "+m+".id = '"+Neo4jStringUtils.cypherESC(vi.getId())+"'  and "+m+".categoryId = '"+Neo4jStringUtils.cypherESC(vi.getCategoryId())+"'");
+					CQLcreate.append("merge ("+n+")-[:UserCate2View]->("+m+") ");
+					loop++;
+				}
+			}
+		}else if(uiL != null && pviL != null){ //user指向Ci
+			for(int i=0;i<uiL.size();i++){
+				UserInformation ui = uiL.get(i);
+				for(int j=0;j<viL.size();j++){
+					String n = "n"+loop;
+					String m = "m"+loop;
+					ViewInformation vi = viL.get(j);
+					CQLmatch.append("match ("+n+":User) where "+n+".uesrname = '"+Neo4jStringUtils.cypherESC(ui.getUsername())+"' and "+n+".categoryId = '"+Neo4jStringUtils.cypherESC(ui.getCategoryId())+"' match ("+m+":View) where "+m+".id = '"+Neo4jStringUtils.cypherESC(vi.getId())+"' and "+m+".categoryId = '"+Neo4jStringUtils.cypherESC(vi.getCategoryId())+"' ");
+					CQLcreate.append("merge ("+n+")-[:User2View]->("+m+") ");
+					loop++;
+				}
+			}
+		}else if(uiL == null && pviL != null){ //
+			for(int i=0;i<ucL.size();i++){
+				UserCategory uc = ucL.get(i);
+				for(int j=0;j<viL.size();j++){
+					String n = "n"+loop;
+					String m = "m"+loop;
+					ViewPortfolio vp = pviL.get(j);
+					CQLmatch.append("match ("+n+":UserCate) where "+n+".`id` = '"+Neo4jStringUtils.cypherESC(uc.getId())+"' match ("+m+":View) where "+m+".`id` = '"+Neo4jStringUtils.cypherESC(vp.getId())+"' ");
+					CQLcreate.append("merge ("+n+")-[:UserCate2ViewPtfl]->("+m+") ");
+					loop++;
+				}
+			}
+		}else if(uiL != null && pviL != null){ //
+			for(int i=0;i<uiL.size();i++){
+				UserInformation ui = uiL.get(i);
+				for(int j=0;j<viL.size();j++){
+					String n = "n"+loop;
+					String m = "m"+loop;
+					ViewPortfolio vp = pviL.get(j);
+					CQLmatch.append("match ("+n+":User) where "+n+".`uesrname` = '"+Neo4jStringUtils.cypherESC(ui.getUsername())+"' and "+n+".`categoryId` = '"+Neo4jStringUtils.cypherESC(ui.getCategoryId())+"' match ("+m+":View) where "+m+".`id` = '"+Neo4jStringUtils.cypherESC(vp.getId())+"' ");
+					CQLcreate.append("merge ("+n+")-[:User2ViewPtfl]->("+m+") ");
+					loop++;
+				}
+			}
+		}else{
+			log.eLog("建立用户-View关系数据异常");
+		}
+		String CQL = CQLmatch.append(CQLcreate)+"";
+		Neo4jDao.executeNoRest(CQL);
+		
+	}
+}

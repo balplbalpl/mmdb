@@ -1,0 +1,159 @@
+package com.mmdb.websocket;
+
+import java.io.IOException;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import javax.websocket.OnClose;
+import javax.websocket.OnError;
+import javax.websocket.OnMessage;
+import javax.websocket.OnOpen;
+import javax.websocket.Session;
+import javax.websocket.server.ServerEndpoint;
+
+import org.hsqldb.lib.HashMap;
+
+import net.sf.json.JSONObject;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+
+/**
+ * 这个类主要用于返回上传文件的信息
+ * 
+ * @author xiongjian
+ * 
+ */
+@ServerEndpoint(value = "/websocket/message")
+public class MessageResult {
+	private Log log = LogFactory.getLogger("MessageResult");
+
+	private static final Set<MessageResult> conns = new HashSet<MessageResult>();
+
+	private Session session;
+	/**
+	 * 接收前台传送过来的状态,上传文件A文件B什么什么的
+	 */
+	private static String status;
+
+	@OnOpen
+	public void start(Session session) {
+		Map<String, List<String>> requestParameterMap = session
+				.getRequestParameterMap();
+		log.dLog("增加一个人!!!!!!");
+		this.session = session;
+		conns.add(this);
+	}
+
+	@OnClose
+	public void end() {
+		System.out.println(this.session.getId());
+		conns.remove(this);
+	}
+
+	@OnError
+	public void onError(Throwable t) throws Throwable {
+		log.eLog(t.getMessage());
+
+	}
+
+	@OnMessage
+	public void incoming(String message) {
+		try {
+			JSONObject data = JSONObject.fromObject(message);
+			MessageResult.status = data.getString("filename");
+		} catch (Exception e) {
+		}
+		log.dLog(message);
+	}
+
+	public static void broadcast(Map<String, Object> msg) {
+		for (MessageResult result : conns) {
+			try {
+				synchronized (result) {
+					JSONObject ret = JSONObject.fromObject(msg);
+					result.session.getBasicRemote().sendText(ret.toString());
+				}
+			} catch (Exception e) {
+				conns.remove(result);
+				try {
+					result.session.close();
+				} catch (IOException e1) {
+				}
+			}
+		}
+	}
+
+	public static void broadcast(String msg) {
+		for (MessageResult result : conns) {
+			try {
+				synchronized (result) {
+					JSONObject ret = new JSONObject();
+					ret.put("message", msg);
+					ret.put("status", status);
+					ret.put("filename", status);
+					result.session.getBasicRemote().sendText(ret.toString());
+				}
+			} catch (Exception e) {
+				conns.remove(result);
+				try {
+					result.session.close();
+				} catch (IOException e1) {
+				}
+			}
+		}
+	}
+
+	/**
+	 * 用于上传文件,后返回给前台的数据
+	 * 
+	 * @param msg
+	 * @param filename
+	 */
+	public static void broadcast(String msg, String filename) {
+		for (MessageResult result : conns) {
+			try {
+				synchronized (result) {
+					JSONObject ret = new JSONObject();
+					ret.put("message", msg);
+					ret.put("filename", status);
+					result.session.getBasicRemote().sendText(ret.toString());
+				}
+			} catch (Exception e) {
+				conns.remove(result);
+				try {
+					result.session.close();
+				} catch (IOException e1) {
+				}
+			}
+		}
+	}
+
+	/**
+	 * 用于上传文件,后返回给前台的数据
+	 * 
+	 * @param msg
+	 * @param filename
+	 */
+	public static void broadcast(String msg, double progress) {
+		for (MessageResult result : conns) {
+			try {
+				synchronized (result) {
+					JSONObject ret = new JSONObject();
+					ret.put("message", msg);
+					ret.put("filename", status);
+					ret.put("progress", progress);
+					result.session.getBasicRemote().sendText(ret.toString());
+				}
+			} catch (Exception e) {
+				conns.remove(result);
+				try {
+					result.session.close();
+				} catch (IOException e1) {
+				}
+			}
+		}
+	}
+}

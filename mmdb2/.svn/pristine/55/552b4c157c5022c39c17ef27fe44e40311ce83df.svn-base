@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-3.0.xsd">
+
+    <!-- 真正可以产生Connection的ConnectionFactory，由对应的 JMS服务厂商提供 -->
+    <bean id="targetConnectionFactory" class="org.apache.activemq.ActiveMQConnectionFactory">
+        <property name="brokerURL" value="${amq.url}"/>
+    </bean>
+
+    <!-- Spring用于管理真正的ConnectionFactory的ConnectionFactory -->
+    <bean id="connectionFactory"
+          class="org.springframework.jms.connection.SingleConnectionFactory">
+        <!-- 目标ConnectionFactory对应真实的可以产生JMS Connection的ConnectionFactory -->
+        <property name="targetConnectionFactory" ref="targetConnectionFactory"/>
+    </bean>
+    <!-- Spring提供的JMS工具类，它可以进行消息发送、接收等 -->
+    <bean id="jmsTemplate" class="org.springframework.jms.core.JmsTemplate">
+        <!-- 这个connectionFactory对应的是我们定义的Spring提供的那个ConnectionFactory对象 -->
+        <property name="connectionFactory" ref="connectionFactory"/>
+    </bean>
+    <!--这个是队列目的地 -->
+    <bean id="queueDestinationByCi" class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg>
+            <value>${amq.queue.ci}</value>
+        </constructor-arg>
+    </bean>
+    <bean id="queueDestinationByUser" class="org.apache.activemq.command.ActiveMQQueue">
+        <constructor-arg>
+            <value>${amq.queue.user}</value>
+        </constructor-arg>
+    </bean>
+    <!-- 消息监听器 -->
+    <bean id="consumerMessageListenerByCi" class="com.mmdb.service.sync.DcvCiDataSync"/>
+    <bean id="consumerMessageListenerByUser" class="com.mmdb.service.sync.DcvUserDataSync"/>
+    <!-- 消息监听容器 -->
+    <bean id="jmsContainerByCi"
+          class="org.springframework.jms.listener.DefaultMessageListenerContainer" lazy-init="true">
+        <property name="connectionFactory" ref="connectionFactory"/>
+        <property name="destination" ref="queueDestinationByCi"/>
+        <property name="messageListener" ref="consumerMessageListenerByCi"/>
+         <!-- 设置固定的线程数 -->  
+	    <property name="concurrentConsumers" value="4"></property>  
+	    <!-- 设置动态的线程数 -->  
+	    <property name="concurrency" value="3-5"></property>  
+	    <!-- 设置最大的线程数 -->  
+	    <property name="maxConcurrentConsumers" value="6"></property>  
+    </bean>
+    <bean id="jmsContainerByUser"
+          class="org.springframework.jms.listener.DefaultMessageListenerContainer" lazy-init="true">
+        <property name="connectionFactory" ref="connectionFactory"/>
+        <property name="destination" ref="queueDestinationByUser"/>
+        <property name="messageListener" ref="consumerMessageListenerByUser"/>
+	    <property name="concurrentConsumers" value="6"></property>  
+	    <property name="concurrency" value="2-9"></property>  
+	    <property name="maxConcurrentConsumers" value="15"></property>  
+    </bean>
+</beans>

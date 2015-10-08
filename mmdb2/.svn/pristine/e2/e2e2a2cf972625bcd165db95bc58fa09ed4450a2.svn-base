@@ -1,0 +1,39 @@
+package com.mmdb.model.security.storage;
+
+import java.util.List;
+
+import org.springframework.stereotype.Service;
+
+import com.mmdb.core.framework.neo4j.storage.NodeStorage;
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.security.Authorize;
+
+/**
+ * 权限存储
+ *
+ * @author XIE
+ */
+@Service
+public class AuthorizeStorage extends NodeStorage<Authorize> {
+    private Log log = LogFactory.getLogger("AuthorizeStorage");
+
+    /**
+     * 根据id获取权限组
+     *
+     * @param id 权限组id
+     * @return
+     * @throws Exception
+     */
+    public Authorize getById(String id) throws Exception {
+        List<Authorize> list = this.getByProperty("id", id);
+        if (list.size() == 1) {
+            return list.get(0);
+        } else if (list.size() > 1) {
+            log.eLog("Authorize[" + id + "]not unique.");
+            throw new Exception("Authorize[" + id + "]not unique.");
+        } else {
+            return null;
+        }
+    }
+}

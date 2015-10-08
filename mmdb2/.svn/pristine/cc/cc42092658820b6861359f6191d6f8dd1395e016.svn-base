@@ -1,0 +1,372 @@
+package com.mmdb.model.relation.storage;
+
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import org.springframework.stereotype.Component;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.info.CiInformation;
+import com.mmdb.mongo.MongoConnect;
+import com.mmdb.mongo.mongodb.jdbc.MongoStatement;
+import com.mongodb.BasicDBList;
+import com.mongodb.BasicDBObject;
+import com.mongodb.DB;
+import com.mongodb.DBCollection;
+import com.mongodb.DBCursor;
+import com.mongodb.DBObject;
+
+@Component("ciKpiRelStorage")
+public class CiKpiRelStorage {
+	private Log log = LogFactory.getLogger("CiKpiRelStorage");
+
+	public List<Map<String, String>> getAllCiKpiRel() throws SQLException {
+		String sql = "select * from CiKpiRelation order by ciId";
+		List<Map<String, String>> ret = new ArrayList<Map<String, String>>();
+		Statement pstmt = null;
+		ResultSet rs = null;
+		Connection conn = MongoConnect.getConnection();
+		try {
+			pstmt = conn.createStatement();
+			rs = pstmt.executeQuery(sql);
+			while (rs.next()) {
+				Map<String, String> rel = new HashMap<String, String>();
+				rel.put("ciid", rs.getString("ciId"));
+				rel.put("kpiid", rs.getString("kpiId"));
+				rel.put("autoRelation", rs.getString("autoRelation"));
+				rel.put("hasData", rs.getString("hasData"));
+				ret.add(rel);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		} finally {
+			if (rs != null) {
+				rs.close();
+			}
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		}
+		return ret;
+	}
+
+	/**
+	 * 通过CI的ID获取到这个CI下的所有KPI
+	 * 
+	 * @param ciId
+	 * @return List<Map<String, String>>
+	 * @throws SQLException
+	 */
+	public List<Map<String, String>> getRelByCiId(String ciId)
+			throws SQLException {
+		String sql = "select * from CiKpiRelation where ciId='" + ciId + "'";
+		List<Map<String, String>> ret = new ArrayList<Map<String, String>>();
+		Statement pstmt = null;
+		ResultSet rs = null;
+		Connection conn = MongoConnect.getConnection();
+		try {
+			pstmt = conn.createStatement();
+			rs = pstmt.executeQuery(sql);
+			while (rs.next()) {
+				Map<String, String> rel = new HashMap<String, String>();
+				rel.put("ciId", rs.getString("ciId"));
+				rel.put("kpiId", rs.getString("kpiId"));
+				rel.put("autoRelation", rs.getString("autoRelation"));
+				rel.put("hasData", rs.getString("hasData"));
+				ret.add(rel);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		} finally {
+			if (rs != null) {
+				rs.close();
+			}
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		}
+		return ret;
+	}
+
+	public Integer getCiKpiRelCount() throws SQLException {
+		String sql = "select * from CiKpiRelation";
+		MongoStatement pstmt = null;
+		Connection conn = MongoConnect.getConnection();
+		int count = 0;
+		try {
+			pstmt = (MongoStatement) conn.createStatement();
+			count = pstmt.executeQueryCount(sql);
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		} finally {
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		}
+		return count;
+	}
+
+	/**
+	 * 增加CI KPI关系
+	 * 
+	 * @param ciid ci的16进制ID
+	 * @param kpiid kpi的16进制ID
+	 * @param autoRelation 是否是自动关联的
+	 * @param hasData 关系下是否有数据
+	 * 
+	 * @return 新增:true 更新:false
+	 */
+	public boolean addCiKpiRel(String ciid, String kpiid, boolean autoRelation,
+			boolean hasData) {
+		try {
+			boolean isSave = true;
+			DB db = MongoConnect.getDb();
+			DBCollection collection = db.getCollection("CiKpiRelation");
+			BasicDBObject queryObj = new BasicDBObject();
+			queryObj.put("ciId", ciid);
+			queryObj.put("kpiId", kpiid);
+
+			DBCursor queryList = collection.find(queryObj);
+			// 判断是否存在，如果存在则更新，不存在则插入
+			if (queryList.hasNext()) {
+				DBObject obj = queryList.next();
+				obj.put("hasData", hasData + "");
+				obj.put("autoRelation", autoRelation + "");
+				collection.update(queryObj, obj, true, false);
+				isSave = false;
+			} else {
+				BasicDBObject newObj = new BasicDBObject();
+				newObj.put("ciId", ciid);
+				newObj.put("kpiId", kpiid);
+				// 标识kpi和ci的关系是否是自动关联上的，此处应该都为true
+				newObj.put("autoRelation", autoRelation + "");
+				newObj.put("hasData", hasData + "");
+				//collection.insert(newObj);
+				//modify at 2015-9-18，改成update方法确保不会有重复数据
+				collection.update(queryObj, newObj, true, false);
+			}
+			return isSave;
+		} catch (Exception e) {
+			log.eLog("保存CI及KPI映射关系时发生异常", e);
+			return false;
+		}
+	}
+
+	
+	/**
+	 * 通过rel id列表获取到指定的关系
+	 * 
+	 * @param ciId
+	 * @return List<Map<String, String>>
+	 * @throws SQLException
+	 */
+	public List<Map<String, String>> getRelByRelIds(List<String> relIds)
+			throws SQLException {
+		
+		List<Map<String, String>> ret = new ArrayList<Map<String, String>>();
+		Statement pstmt = null;
+		ResultSet rs = null;
+		Connection conn = MongoConnect.getConnection();
+		try {
+			StringBuffer idsSql = new StringBuffer();
+			for (String relId : relIds) {
+				idsSql.append(" _id = '");
+				idsSql.append(relId);
+				idsSql.append("' or");
+			}
+			idsSql.delete(idsSql.length() - 2, idsSql.length());
+			String sql = "select * from CiKpiRelation where " + idsSql;
+			pstmt = conn.createStatement();
+			rs = pstmt.executeQuery(sql);
+			while (rs.next()) {
+				Map<String, String> rel = new HashMap<String, String>();
+				rel.put("ciId", rs.getString("ciId"));
+				rel.put("kpiId", rs.getString("kpiId"));
+				rel.put("autoRelation", rs.getString("autoRelation"));
+				rel.put("hasData", rs.getString("hasData"));
+				ret.add(rel);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		} finally {
+			if (rs != null) {
+				rs.close();
+			}
+			if (pstmt != null) {
+				pstmt.close();
+			}
+		}
+		return ret;
+	}
+	
+	/**
+	 * 批量删除关系
+	 * 
+	 * @param relIds
+	 *            rel ID集合
+	 * @throws Exception
+	 */
+	public void deleteRelByIds(List<String> relIds) throws Exception {
+		Connection conn = MongoConnect.getConnection();
+		Statement stmt = null;
+		try {
+			StringBuffer idsSql = new StringBuffer();
+			for (String relId : relIds) {
+				idsSql.append(" _id = '");
+				idsSql.append(relId);
+				idsSql.append("' or");
+			}
+			idsSql.delete(idsSql.length() - 2, idsSql.length());
+			String delSql = "delete from CiKpiRelation where " + idsSql;
+			stmt = conn.createStatement();
+			stmt.executeUpdate(delSql);
+		} catch (Exception e) {
+			log.eLog("Delete rel by ids error!", e);
+			throw e;
+		} finally {
+			if (stmt != null) {
+				stmt.close();
+			}
+			stmt = null;
+		}
+	}
+	
+	/**
+	 * 删除CI KPI关系
+	 * 
+	 * @param ciId
+	 * @param kpiIds
+	 */
+	public void deleteCiKpiRel(String ciId, List<String> kpiIds)
+			throws Exception {
+		Connection conn = MongoConnect.getConnection();
+		Statement stmt = null;
+		try {
+			StringBuffer idsSql = new StringBuffer();
+			for (String kpiId : kpiIds) {
+				idsSql.append(" kpiId = '");
+				idsSql.append(kpiId);
+				idsSql.append("' or");
+			}
+			idsSql.delete(idsSql.length() - 2, idsSql.length());
+			String delSql = "delete from CiKpiRelation where ciId= '" + ciId
+					+ "' and (" + idsSql + ")";
+			stmt = conn.createStatement();
+			stmt.executeUpdate(delSql);
+		} catch (Exception e) {
+			log.eLog("Delete rel error!", e);
+			throw e;
+		} finally {
+			if (stmt != null) {
+				stmt.close();
+			}
+			stmt = null;
+		}
+	}
+
+	public void deleteCiKpiRelByCi(String ciId) throws Exception {
+		Connection conn = MongoConnect.getConnection();
+		Statement stmt = null;
+		try {
+			String delSql = "delete from CiKpiRelation where ciId= '" + ciId
+					+ "'";
+			stmt = conn.createStatement();
+			stmt.executeUpdate(delSql);
+		} catch (Exception e) {
+			log.eLog("Delete rel error!", e);
+			throw e;
+		} finally {
+			if (stmt != null) {
+				stmt.close();
+			}
+			stmt = null;
+		}
+	}
+
+	public void deleteCiKpiRelByKpi(String kpiId) throws Exception {
+		Connection conn = MongoConnect.getConnection();
+		Statement stmt = null;
+		try {
+			String delSql = "delete from CiKpiRelation where kpiId= '" + kpiId
+					+ "'";
+			stmt = conn.createStatement();
+			stmt.executeUpdate(delSql);
+		} catch (Exception e) {
+			log.eLog("Delete rel error!", e);
+			throw e;
+		} finally {
+			if (stmt != null) {
+				stmt.close();
+			}
+			stmt = null;
+		}
+	}
+	
+	public void deleteAll()throws Exception{
+		MongoConnect.executeUpdate("delete from CiKpiRelation");
+	}
+	
+	
+	public int getCountByCiHex(String ciHex) {
+		Connection conn = MongoConnect.getConnection();
+		MongoStatement stmt = null;
+		try {
+			String count = "select * from CiKpiRelation where `ciId` = '" + ciHex
+					+ "'";
+			stmt = (MongoStatement) conn.createStatement();
+			
+			 return stmt.executeQueryCount(count);
+		} catch (Exception e) {
+			e.printStackTrace();
+		} finally {
+			if (stmt != null) {
+				stmt.close();
+			}
+			stmt = null;
+		}
+		return 0;
+	}
+
+	public List<Map<String, String>> getKpiByCiHexs(List<String> ciHexs,
+			int start, int limit) {
+		List<Map<String, String>> ret = new ArrayList<Map<String, String>>();
+		if (ciHexs == null || ciHexs.size() == 0)
+			return ret;
+		try {
+			BasicDBList query = new BasicDBList();
+			for (String ciHex : ciHexs) {
+				BasicDBList l = new BasicDBList();
+				l.add(new BasicDBObject("ciId", ciHex));
+				BasicDBObject o = new BasicDBObject("$or", l);
+				query.add(o);
+			}
+			DB db = MongoConnect.getDb();
+			DBCollection ciColl = db.getCollection("CiKpiRelation");
+			DBCursor find = ciColl.find(new BasicDBObject("$or", query)).sort(new BasicDBObject("ciId", 1).append("kpiId", 1)).skip(start).limit(limit);
+			for (DBObject dbObject : find) {
+				Map<String, String> rel = new HashMap<String, String>();
+				rel.put("id", dbObject.get("_id").toString());
+				rel.put("ciId", dbObject.get("ciId").toString());
+				rel.put("kpiId", dbObject.get("kpiId").toString());
+				rel.put("autoRelation", dbObject.get("autoRelation").toString());
+				rel.put("hasData", dbObject.get("hasData").toString());
+				ret.add(rel);
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return ret;
+	}
+}

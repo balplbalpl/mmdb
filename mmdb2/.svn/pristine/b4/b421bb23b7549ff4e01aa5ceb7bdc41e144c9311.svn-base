@@ -1,0 +1,414 @@
+/* global c3 */
+
+
+(function(graph){
+
+	'use strict';
+
+	var F;
+
+	F = function(options){
+		this.container = [];
+		this.id = options.id;
+		this.ciIds = options.ciIds;
+		this.cellWidth = 200;
+		this.template = 'ci/ciInfo';
+		this.$className = '.ci-info';
+		this.$container = $(options.container);
+		this.domId = graph.utils.randstr(32);
+		this.$domId = '#' + this.domId;
+		this.getData();
+		this.formatData();
+		this.build();
+		this.event();
+		this.isInitGraph = false;
+		this.startTime = graph.utils.unixToDatetime((new Date).getTime());
+		this.endTime = null;
+	};
+
+	F.prototype.draw = function(data){
+		var _this = this, i, parent, model, v1, v2, arr = [], type = graph.DEFINE_CI.GRAPH_PREFIX, style, ids = [], id, ii, editor = _this.editor;
+
+		parent = editor.graph.getDefaultParent();
+		model = editor.graph.getModel();
+		model.beginUpdate();
+
+		try {
+			for(i=0; i<data.node.length; i++){
+				if(!editor.graph.getCellByID([type, data.node[i]._neo4jid_].join(''))){
+					style = 'image;image=' + graph.ICO_LIB_VIEW[data.node[i]._categoryId_];
+					id = [type, data.node[i]._neo4jid_].join('');
+					editor.graph.insertVertex(parent, id, data.node[i]._id_, 0, 0, graph.DEFINE_CONFIG_INFO.DRAG_WIDTH, graph.DEFINE_CONFIG_INFO.DRAG_HEIGHT, style);
+				}
+
+				ids.push(data.node[i]._neo4jid_);
+			}
+
+			for(ii=0; ii<data.relation.length; ii++){
+				arr = data.relation[ii].split('_');
+				v1 = editor.graph.getCellByID([type, arr[0]].join(''));
+				v2 = editor.graph.getCellByID([type, arr[2]].join(''));
+
+				if(v1 && v2){
+					editor.graph.insertEdge(parent, graph.utils.randstr(), arr[1], v1, v2);
+				}
+			}
+		} finally {
+			model.endUpdate();
+		}
+
+		graph.utils.executeLayout(
+			editor.graph,
+			new mxHierarchicalLayout(
+				editor.graph,
+				mxConstants.DIRECTION_NORTH
+			),
+			true,
+			true
+		);
+
+
+		editor.graph.refresh();
+		editor.graph.zoomToCenter();
+	};
+
+	F.prototype.getGraphData = function(){
+		var _this = this, result1, result2, result, data = {}, nodes = [];
+
+		if(_this.ciIds){
+			result1 = graph.api.getRelationCiByIds(_this.ciIds);
+			result2 = graph.api.getCis(_this.ciIds);
+			if(graph.utils.isTrueRet(result1) && graph.utils.isTrueRet(result2)){
+
+				$.each(result2.data, function(){
+					nodes.push(this);
+				});
+
+				data = {
+					node: nodes,
+					relation: result1.data
+				};
+			}else{
+				graph.utils.alert(result1.message);
+				throw new Error(result1.message);
+			}
+		}else{
+			result = graph.api.getCiRelationById(_this.id, null, JSON.stringify({}), {down:5, up: 0});
+
+			if(graph.utils.isTrueRet(result)){
+				data = result.data;
+			}else{
+				graph.utils.alert(result.message);
+				throw new Error(result.message);
+			}
+		}
+
+		return data;
+	};
+
+	F.prototype.initGraph = function(){
+		var $main = $('#tab_12_1_2'), _this = this, cell;
+
+		_this.editor = graph.utils.getEditor($main[0]);
+		_this.editor.graph.setEnabled(false);
+
+		_this.draw(_this.getGraphData());
+		_this.editor.zoomLock = true;
+
+		_this.editor.graph.container.style.background = '#FFF';
+		_this.editor.graph.container.style.backgroundImage = null;
+		$(_this.editor.graph.container).find('svg')[0].style.backgroundColor = 'transparent';
+		$(_this.editor.graph.container).find('svg')[0].style.backgroundImage = null;
+
+		cell = _this.editor.graph.getCellByID([graph.DEFINE_CI.GRAPH_PREFIX, _this.id].join(''));
+		if(cell){
+			_this.editor.graph.addLight(cell);
+		}
+
+	};
+
+	F.prototype.event = function(){
+		var _this = this;
+		_this.regevented = graph.event.reg(graph.DEFINE_EVENT.TIMELINE_POINT_CLICK, function(ev){
+			if(ev.time === 'current'){
+				_this.startTime = graph.utils.unixToDatetime((new Date).getTime());
+				_this.endTime = null;
+			}else{
+				_this.startTime = ev.time;
+
+				var now = graph.utils.datetimeToUnix(ev.time) * 1000;
+				_this.endTime = graph.utils.unixToDatetime(now + 60 * 1000 * 5);
+			}
+
+			_this.getData(_this.startTime, _this.endTime);
+			_this.formatData();
+
+			graph.utils.render('ci/table.html', _this.data.event, function(html){
+				$('#tab_12_1_1 > div:eq(1)').find('.panel-body > div').html(html);
+			});
+
+			graph.utils.render('ci/table.html', _this.data.perf, function(html){
+				$('#tab_12_1_1 > div:last').find('.panel-body > div').html(html);
+			});
+		});
+
+		$('a[href=#tab_12_1_2]').on('shown.bs.tab', function (e) {
+			if(!_this.isInitGraph){
+				_this.isInitGraph = true;
+				_this.initGraph();
+			}
+		});
+	};
+
+	F.prototype.getData = function(start, end){
+		var _this = this, result;
+
+		result = graph.api.ciGet(_this.id, start, end);
+
+		if(graph.utils.isTrueRet(result)){
+
+			$.each(result.data.perfHistory, function(){
+				var _this = this;
+				_this.id = graph.utils.randstr();
+			});
+
+			_this.data = result.data;
+		}else{
+			graph.utils.alert(result.message);
+			throw new Error(result.message);
+		}
+	};
+
+	F.prototype.toArrayFormat = function(data){
+		var _this = this;
+
+		data.rows = [];
+		$.each(data.row, function(){
+			var row = [], obj = this;
+			$.each(data.head, function(){
+				row.push(obj[this]);
+			});
+
+			data.rows.push(row);
+		});
+
+		data.width = data.head.length * _this.cellWidth;
+
+		return data;
+	};
+
+	F.prototype.formatData = function(){
+		var _this = this, rute = {};
+
+		rute.config = function(data){
+			var ret = {};
+
+			ret.title = '配置信息';
+			ret.head = [];
+			$.each(data, function(key){
+				ret.head.push(key);
+			});
+
+			ret.row = [data];
+			ret.style = 'primary';
+			return _this.toArrayFormat(ret);
+		};
+
+		rute.perf = function(data){
+			data.title = '监控';
+			data.style = 'success';
+			return _this.toArrayFormat(data);
+		};
+
+		rute.event = function(data){
+			data.title = '告警';
+			data.style = 'danger';
+			return _this.toArrayFormat(data);
+		};
+
+		rute.ciViews = function(data) {
+			return data;
+		};
+
+
+		$.each(_this.data, function(key){
+			if(typeof rute[key] === 'function'){
+				_this.data[key] = rute[key](this);
+				_this.data[key].key = key;
+			}
+		});
+	};
+
+	F.prototype.build = function(){
+		var _this = this;
+		graph.utils.render(_this.template, {
+			id: _this.domId,
+			data: [_this.data.config, _this.data.event, _this.data.perf]
+		}, function(html){
+			$(_this.$className).remove();
+			_this.$container.append(html);
+			_this.$main = $(_this.$domId);
+			_this.$head = _this.$main.find('.ci-info-head');
+			_this.$body = _this.$main.find('.ci-info-body');
+			_this.$graph = _this.$main.find('.ci-info-graph');
+			_this.$closeBtn = _this.$main.find('.ci-info-close-btn');
+			_this.$body.height(_this.$main.height() - _this.$head.height());
+			_this.$body.css({overflow: 'auto'});
+			_this.$main.find('.ci-info-showdetail-btn').each(function(){
+				var key = $(this).attr('data-key');
+				$(this).click(function(){
+					if(key === 'perf' && _this.data.perfHistory){
+						_this.showChart(key);
+					}else{
+						_this.showDetail(key);
+					}
+				});
+			});
+			_this.$closeBtn.click(function(){
+				_this.remove();
+			});
+		});
+	};
+
+	F.prototype.initCharts = function($main, data){
+		var getItemData, update, $selectPerf = $('#selectPerf');
+
+		getItemData = function(id){
+			var key, ret;
+			for(key in data){
+				if(data[key].id === id){
+					ret = data[key];
+					break;
+				}
+			}
+
+			return ret;
+		};
+
+		update = function(id){
+			var itemData, valueList = ['data'], keyValue = [];
+			itemData = getItemData(id);
+
+			if(itemData.curr){
+				c3.generate({
+					bindto: '#gauge-perf',
+					data: {
+						columns: [
+							['data', itemData.curr]
+						],
+						type: 'gauge'
+					},
+					color: {
+						pattern: ['#FF0000', '#F97600', '#F6C600', '#60B044'], // the three color levels for the percentage values.
+						threshold: {
+							//unit: 'value', // percentage is default
+							//max: 200, // 100 is default
+							values: [30, 60, 90, 100]
+						}
+					},
+					size: {
+						height: 180
+					}
+				});
+			}
+
+			if(itemData.data){
+				$.each(itemData.data, function(){
+					var _this = this;
+					valueList.push(_this.value);
+					keyValue.push(_this.label);
+				});
+			}
+
+			if(valueList.length >= 1){
+				c3.generate({
+					bindto: '#line-perf',
+					data: {
+						columns: [valueList],
+						type: 'spline'
+					},
+					axis: {
+						x: {
+							type: 'category',
+							categories: keyValue
+						}
+					}
+				});
+			}
+		};
+
+		update($selectPerf.val());
+		$selectPerf.change(function(){
+			update(this.value);
+		});
+	};
+
+	F.prototype.showDetail = function(key){
+		var show, _this = this;
+
+		show = function(data){
+			$('.ci-info-detail').remove();
+			graph.utils.render('ci/detailInfo', data, function(html){
+				var $main;
+				$(document.body).append(html);
+				$main = $('.ci-info-detail');
+				$main.height($main.find('.panel').outerHeight());
+				$('.ci-info-close-detail-btn').click(function(){
+					$main.remove();
+				});
+			});
+		};
+
+		show(_this.data[key]);
+	};
+
+	F.prototype.showChart = function(key){
+		var _this = this, data;
+
+		if(key === 'perf'){
+			data = _this.data.perfHistory;
+		}
+
+		graph.utils.render('ci/detailChart', {
+			ori: _this.data[key],
+			data: data
+		}, function(html){
+			var $main, $detail;
+			$(document.body).append(html);
+			$main = $('#chart-11');
+			$detail = $('.ci-info-detail');
+			$main.find('.ci-info-head').find('>li:first').addClass('active');
+			$main.find('.tab-content').find('>tab-pane:first').addClass('active');
+			$('.ci-info-close-detail-btn').click(function(){
+				$detail.remove();
+			});
+
+			_this.initCharts($main, data);
+			$detail.height($detail.find('.panel').outerHeight());
+		});
+	};
+
+	F.prototype.show = function(){
+		var _this = this;
+		_this.$main.show();
+	};
+
+	F.prototype.hide = function(){
+		var _this = this;
+		_this.$main.hide();
+	};
+
+	F.prototype.remove = function(){
+		var _this = this;
+		$.each(_this.container, function(){
+			$(this).remove();
+		});
+		_this.$main.remove();
+		$('.ci-info-detail').remove();
+		graph.event.trigger(graph.DEFINE_EVENT.CI_INFO_CLOSE, _this);
+		_this.regevented.destroy();
+	};
+
+	graph.CiInfo = F;
+
+})(nameSpace.reg('graph'));

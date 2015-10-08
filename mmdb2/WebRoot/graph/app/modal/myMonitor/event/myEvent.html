@@ -1,0 +1,108 @@
+<div class="h100">
+	<tabset class="h100">
+
+		<tab select="showBaseEvent()">
+			<tab-heading>
+				事件基本信息
+			</tab-heading>
+			<div class="modal-body">
+				<div ng-scroll class="myevent-info-body psrl">
+					<ul class="list-group">
+						<li class="list-group-item" ng-repeat="(k,v) in baseEvent">
+							<div class="row">
+								<div class="col-md-4"><b>{{k}}</b></div>
+								<div class="col-md-8">{{v}}</div>
+							</div>
+						</li>
+					</ul>
+				</div>
+				<div class="modal-footer clearfix">
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+				</div>
+			</div>
+		</tab>
+		<tab select="showConfig()">
+			<tab-heading>
+				配置对象信息
+			</tab-heading>
+			<div class="modal-body">
+				<div ng-scoll class="myevent-info-body">
+					<ul class="list-group">
+						<li class="list-group-item" ng-repeat="(k,v) in eventConfig">
+							<div class="row">
+								<div class="col-md-4"><b>{{k}}</b></div>
+								<div class="col-md-8">{{v}}</div>
+							</div>
+						</li>
+					</ul>
+				</div>
+				<div class="modal-footer clearfix">
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+				</div>
+			</div>
+		</tab>
+		<tab select="showPerf()">
+			<tab-heading>
+				性能指标
+			</tab-heading>
+			<div class="modal-body">
+				<div class="myevent-info-body">
+					<ul class="list-group">
+						<li class="list-group-item" ng-repeat="perfTitle in perfTitles">
+							<div class="row">
+								<div class="col-md-4"><b>{{perfTitle.name}}</b></div>
+								<div class="col-md-8">{{perfTitle.val}}</div>
+							</div>
+						</li>
+					</ul>
+					<div class="myevent-perf-chart psrl" stype="height: 320px;overflow:hidden">
+
+					</div>
+				</div>
+				<div class="modal-footer clearfix">
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+				</div>
+			</div>
+		</tab>
+		<tab select="showOperation()">
+			<tab-heading>
+				操作信息
+			</tab-heading>
+			<div class="modal-body">
+				<div ng-scoll class="myevent-info-body">
+					<ul class="list-group">
+						<li class="list-group-item" ng-repeat="(k,v) in operation">
+							<div class="row">
+								<div class="col-md-4"><b>{{k}}</b></div>
+								<div class="col-md-8">{{v}}</div>
+							</div>
+						</li>
+					</ul>
+				</div>
+				<div class="modal-footer clearfix">
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+				</div>
+			</div>
+		</tab>
+		<tab select="showDuplicateEvent()">
+			<tab-heading>
+				查看从事件
+			</tab-heading>
+			<div class="modal-body">
+				<div ng-scoll class="myevent-info-body">
+					<table class="table w100 table-bordered text-center mt20">
+						<tr>
+							<th ng-repeat="title in titles">{{title}}</th>
+						</tr>
+						<tr ng-repeat="item in duplicateEvents">
+							<td ng-repeat="i in item">{{i}}</td>
+						</tr>
+					</table>
+				</div>
+				<div class="modal-footer clearfix">
+					<button class="btn btn-warning" ng-click="$modal.close()">关闭</button>
+				</div>
+			</div>
+		</tab>
+	</tabset>
+</div>

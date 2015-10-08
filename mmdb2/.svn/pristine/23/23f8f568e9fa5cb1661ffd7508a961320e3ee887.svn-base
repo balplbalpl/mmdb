@@ -1,0 +1,85 @@
+package com.mmdb.common;
+
+import java.util.List;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Service;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.model.bean.Role;
+import com.mmdb.model.bean.User;
+import com.mmdb.model.categroy.ViewCategory;
+import com.mmdb.model.info.ViewInformation;
+import com.mmdb.service.info.IViewInfoService;
+import com.mmdb.service.role.impl.RoleService;
+import com.mmdb.service.role.impl.UserService;
+import com.mmdb.util.HexString;
+
+/**
+ * 用于启动时注册用户.
+ * 
+ * @author xiongjian
+ * 
+ */
+@Component
+public class Global {
+	private Log log = LogFactory.getLogger("Global");
+//	@Autowired
+//	IViewInfoService infoService;
+
+	public Global() {
+		// 初始化用户.
+
+		createDefaultUser();
+		// 刷新个人图片
+
+		// 刷新全部视图的图片
+		refreshSvg();
+	}
+
+	/**
+	 * 创建默认的admin用戶
+	 */
+	protected void createDefaultUser() {
+		log.dLog("init admin");
+		UserService us = new UserService();
+		RoleService role = new RoleService();
+		User defualt = us.getUserByLoginName("admin");
+		if (defualt == null) {
+			User admin = new User();
+			admin.setLoginName("admin");
+			admin.setUserName("admin");
+			admin.setPassword("admin");
+			admin.setCompany("uinv");
+			admin.setDept("admin");
+			StringBuffer roles = new StringBuffer();
+			List<Role> allRole = role.getAllRole();
+			if (allRole != null && allRole.size() > 0) {
+				for (Role role2 : allRole) {
+					roles.append(role2.getRoleName());
+					roles.append(",");
+				}
+				roles.delete(roles.length() - 1, roles.length());
+			}
+			admin.setOwnerRoles(roles.toString());
+			us.saveUser(admin);
+		}
+	}
+
+	protected void refreshSvg() {
+		try {
+//			List<ViewInformation> all = infoService.getAll();
+//			for (ViewInformation viewInformation : all) {
+//				String svg = viewInformation.getSvg();
+//				ViewCategory nc = viewInformation.getCategory();
+//				String Hexname = HexString.encode(HexString.json2Str(
+//						nc.getName(), viewInformation.getName()));
+//				infoService.createSvg(Hexname, svg);
+//			}
+		} catch (Exception e) {
+		}
+	}
+
+}

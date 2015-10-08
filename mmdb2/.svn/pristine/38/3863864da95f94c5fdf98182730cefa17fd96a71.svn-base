@@ -1,0 +1,140 @@
+package com.mmdb.model.relation;
+
+import com.mmdb.core.framework.neo4j.annotation.*;
+import com.mmdb.core.framework.neo4j.entity.RelationEntity;
+import com.mmdb.model.info.UserInformation;
+import com.mmdb.model.info.ViewInformation;
+import com.mmdb.model.security.User;
+import com.mmdb.util.HexString;
+
+import java.util.HashMap;
+import java.util.Map;
+
+@Space("userViewRel")
+public class UserViewRelation  {
+
+    private static final long serialVersionUID = 1L;
+
+    /**
+     * 数据关系id(唯一)
+     */
+    @Uuid
+    private String id;
+
+    /**
+     * 关系起点
+     */
+    private UserInformation user;
+
+    /**
+     * 关系终点
+     */
+    private ViewInformation view;
+    
+    /**
+     * Neo4j id
+     */
+    private Long neo4jid;
+
+    /**
+     * 所属关系分类UID
+     */
+    private String relation = RelationshipTypes.USER2VIEW;
+
+    public UserViewRelation() {
+
+    }
+
+    public UserViewRelation(UserInformation user, ViewInformation view) {
+        this.user = user;
+        this.view = view;
+        this.id = HexString.encode(HexString.json2Str(user.getCategoryId(), user.getUsername())) + "_" + this.relation + "_" +  HexString.encode(HexString.json2Str(view.getCategoryId(), view.getId()));
+    }
+
+    public String getId() {
+        return id;
+    }
+
+    public void setId(String id) {
+        this.id = id;
+    }
+
+   
+
+    public UserInformation getUser() {
+		return user;
+	}
+
+	public void setUser(UserInformation user) {
+		this.user = user;
+	}
+
+	public ViewInformation getView() {
+        return view;
+    }
+
+    public void setView(ViewInformation view) {
+        this.view = view;
+    }
+
+    public String getRelation() {
+        return relation;
+    }
+
+    public void setRelation(String relation) {
+        this.relation = relation;
+    }
+    
+    
+
+    public Long getNeo4jid() {
+		return neo4jid;
+	}
+
+	public void setNeo4jid(Long neo4jid) {
+		this.neo4jid = neo4jid;
+	}
+
+	@Override
+    public int hashCode() {
+        final int prime = 31;
+        int result = super.hashCode();
+        result = prime * result + ((id == null) ? 0 : id.hashCode());
+        result = prime * result + ((relation == null) ? 0 : relation.hashCode());
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj)
+            return true;
+        if (!super.equals(obj))
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        UserViewRelation other = (UserViewRelation) obj;
+        if (id == null) {
+            if (other.id != null)
+                return false;
+        } else if (!id.equals(other.id))
+            return false;
+        if (relation == null) {
+            if (other.relation != null)
+                return false;
+        } else if (!relation.equals(other.relation))
+            return false;
+        return true;
+    }
+
+    public Map<String, Object> asMap() {
+        Map<String, Object> map = new HashMap<String, Object>();
+        map.put("_neo4jid_", this.getNeo4jid());
+        map.put("id", this.getId());
+        map.put("userid", this.getUser().getUsername());
+        map.put("user", this.getUser().asMap());
+        map.put("viewid", this.getView().getId());
+        map.put("view", this.getView().asMap());
+        return map;
+    }
+
+}

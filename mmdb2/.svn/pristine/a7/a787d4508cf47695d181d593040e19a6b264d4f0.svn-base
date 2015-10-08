@@ -1,0 +1,68 @@
+/**
+ * Created by Lee on 2014/11/23.
+ */
+
+(function(graph){
+
+	'use strict';
+
+	var evt = {}, libs;
+
+	libs = nameSpace.reg('graph.EVENT_LIBS');
+
+	evt.reg = function(eventName, fn, regName){
+		regName = regName ? regName : graph.utils.randstr(32);
+		if(typeof fn === 'function'){
+			libs[regName] = {
+				eventName: eventName,
+				count: 0,
+				action: fn
+			};
+		}else{
+			console.log('注册事件失败!');
+		}
+
+		return {
+			destroy: function(){
+				evt.destroy(regName);
+			}
+		};
+	};
+
+	evt.destroy = function(regName){
+		var ret = false;
+		if(libs[regName]){
+			delete libs[regName];
+			ret = true;
+		}
+		return ret;
+	};
+
+	evt.event = function(){
+		return libs;
+	};
+
+	evt.eventGet = function(regName){
+		var ret = false;
+		if(libs[regName]){
+			ret = libs[regName];
+		}
+		return ret;
+	};
+
+	evt.trigger = function(eventName, arg, _this){
+		$.each(libs, function(){
+			if(this.eventName === eventName){
+				this.count++;
+				if(_this){
+					this.action.apply(_this, [arg]);
+				}else{
+					this.action(arg);
+				}
+			}
+		});
+	};
+
+	graph.event = evt;
+
+})(nameSpace.reg('graph'));

@@ -1,0 +1,515 @@
+package com.mmdb.rest.category;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+import org.apache.commons.fileupload.FileItem;
+import org.apache.commons.fileupload.FileUploadException;
+import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.Form;
+import org.restlet.data.Status;
+import org.restlet.engine.io.IoUtils;
+import org.restlet.ext.fileupload.RestletFileUpload;
+import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
+import org.restlet.resource.Put;
+import org.restlet.resource.ServerResource;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.SpringContextUtil;
+import com.mmdb.core.utils.SysProperties;
+import com.mmdb.util.XmlUtil;
+import com.mmdb.model.categroy.KpiCategory;
+import com.mmdb.ruleEngine.Tool;
+import com.mmdb.service.category.IKpiCateService;
+import com.mmdb.util.FileManager;
+import com.mmdb.websocket.MessageResult;
+
+public class KpiCateRest extends ServerResource {
+	private Log log = LogFactory.getLogger("KpiCateRest");
+	private IKpiCateService cateService;
+
+	@Override
+	public void init(Context context, Request request, Response response) {
+		super.init(context, request, response);
+		cateService = (IKpiCateService) SpringContextUtil
+				.getApplicationContext().getBean("kpiCateService");
+		setExisting(true);
+	}
+
+	@Get
+	public Representation getMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+
+		if (param1 == null || "".equals(param1)) {
+			return getAll();
+		} else if ("export".equals(param1)) {
+			return exportData();
+		} else {
+			return getById(param1);
+		}
+	}
+
+	@Post
+	public Representation postMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+			}
+		}
+
+		String operation = null;
+		try {
+			if ("import".equals(param1)) {
+				return new JsonRepresentation(importData(entity));
+			}
+
+			Form form = entity == null ? null : new Form(entity);
+			operation = form.getQueryString();
+			operation = URLDecoder.decode(operation, "utf-8");
+			operation = new String(operation.getBytes("iso-8859-1"), "utf-8");
+
+			JSONObject params = JSONObject.fromObject(operation);
+			if ("getbyname".equals(param1)) {
+				return getByName(params);
+			}else{
+				return saveKpiCategory(params);
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "[" + operation + "]解析失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@Put
+	public Representation putMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+
+		Form form = entity == null ? null : new Form(entity);
+		String operation = null;
+		try {
+			operation = form.getQueryString();
+			operation = URLDecoder.decode(operation, "utf-8");
+			operation = new String(operation.getBytes("iso-8859-1"), "utf-8");
+			JSONObject params = JSONObject.fromObject(operation);
+			return editKpiCategory(params);
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "[" + operation + "]解析失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@Delete
+	public Representation delMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+		if (param1 == null || "".equals(param1)) {
+			return deleteAll();
+		} else {
+			return deleteCateById(param1);
+		}
+	}
+	
+	/**
+	 * 保存KPI分类信息
+	 * 
+	 * @param obj
+	 * @return 
+	 */
+	private Representation saveKpiCategory(JSONObject obj){
+		JSONObject ret = new JSONObject();
+		log.dLog("saveKpiCategory");
+
+		String image = null;
+		String name = null;
+		String parentId = null;
+		try{
+			name = obj.getString("name");
+		} catch (Exception e1) {
+			log.eLog("save", e1);
+			ret.put("message", "必须参数[name]不存在");
+		}
+		try {
+			parentId = obj.getString("parent");
+		} catch (Exception e1) {
+			log.eLog("save", e1);
+			ret.put("message", "必须参数[parent]不存在");
+		}
+		try {
+			image = obj.getString("image");
+		} catch (Exception e1) {
+			log.eLog("save", e1);
+			ret.put("message", "必须参数[image]不存在");
+		}
+		if (ret.containsKey("message")) {
+			getResponse().setStatus(new Status(600));
+			return new JsonRepresentation(ret.toString());
+		}
+
+		if (image != null) {
+			int t = image.lastIndexOf('/');
+			if (t != -1)
+				image = image.substring(t + 1, image.length());
+		}
+
+		try {	
+			KpiCategory k = cateService.getByName(name);
+			if(k!=null){
+				throw new Exception(name+"分类已存在");
+			}
+			KpiCategory kpiCate = new KpiCategory();
+			kpiCate.setName(name);
+
+			if (parentId != null && !("".equals(parentId))) {
+				kpiCate.setParentId(parentId);
+			}else{
+				kpiCate.setParentId("");
+			}
+			kpiCate.setImage(image);
+			kpiCate = cateService.save(kpiCate);
+			Map<String, Object> asMap = kpiCate.toMap();
+			ret.put("data", asMap);
+			ret.put("message", "保存成功");
+		} catch (Exception e) { 
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	/**
+	 * 返回一个json格式全部
+	 * 
+	 * @return
+	 * @throws Exception
+	 */
+	private Representation getAll() {
+		JSONObject ret = new JSONObject();
+		try {
+			List<KpiCategory> all = cateService.getAll();
+			
+			String prefix = Tool.findPath("admin", "resource");
+			String type = SysProperties.get("svg.base");
+			
+			JSONArray list = new JSONArray();
+			for (KpiCategory kpiCate : all) {
+				Map<String, Object> asMap = kpiCate.toMapForRest();
+				
+				asMap.put("text", asMap.get("name"));
+				asMap.put("icon",
+						prefix + "/svg/" + type + "/" + asMap.get("icon"));
+				
+				list.add(asMap);
+			}
+			ret.put("data", list);
+			ret.put("message", "获取全部KPI分类数据成功");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "获取全部KPI分类数据失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	/**
+	 * 通过唯一id获取kpiCategory
+	 * 
+	 * @param id
+	 * @return
+	 * @throws Exception
+	 */
+	@Get
+	private Representation getById(String id) {
+		JSONObject ret = new JSONObject();
+		try {
+			KpiCategory kpiCate = cateService.getById(id);
+			String prefix = Tool.findPath("admin", "resource");
+			String type = SysProperties.get("svg.base");
+			if (kpiCate != null) {
+				Map<String, Object> asMap = kpiCate.toMap();
+				asMap.put("text", asMap.get("name"));
+				asMap.put("icon",
+						prefix + "/svg/" + type + "/" + asMap.get("icon"));
+				
+				ret.put("data", asMap);
+				ret.put("message", "获取KPI分类[" + id + "]成功");
+			} else {
+				ret.put("message", "获取KPI分类[" + id + "]失败");
+				getResponse().setStatus(new Status(600));
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "获取KPI分类[" + id + "]失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	private Representation getByName(JSONObject obj) {
+		JSONObject ret = new JSONObject();
+		String name = "";
+		try {
+			name = obj.getString("name");
+			KpiCategory kpiCate = cateService.getByName(name);
+			if (kpiCate != null) {
+				Map<String, Object> asMap = kpiCate.toMap();
+				ret.put("data", asMap);
+				ret.put("message", "获取KPI分类[" + name + "]成功");
+			} else {
+				ret.put("message", "获取KPI分类[" + name + "]失败");
+				getResponse().setStatus(new Status(600));
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "获取KPI分类[" + name + "]失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	/**
+	 * 导出XMl
+	 * 
+	 * @param entity
+	 * @return
+	 * @throws Exception
+	 */
+	private Representation exportData() {
+		JSONObject ret = new JSONObject();
+		log.dLog("exportXML");
+
+		File file = null;
+		InputStream inStream = null;
+		FileOutputStream outputStream = null;
+
+		try {
+			List<KpiCategory> ncs = cateService.getAll();
+			List<Map<String, Object>> list = new ArrayList<Map<String, Object>>();
+			for (KpiCategory nc : ncs) {
+				list.add(nc.toMap());
+			}
+			inStream = XmlUtil.createKpiCateXml(list);
+			file = FileManager.getInstance().createFile("Kpi-配置项分类-", "xml");
+			file.createNewFile();
+			outputStream = new FileOutputStream(file);
+			IoUtils.copy(inStream, outputStream);
+			ret.put("message", "下载配置项分类成功");
+			JSONObject retData = new JSONObject();
+			retData.put("url", file.getName());
+			ret.put("data", retData);
+
+		} catch (Exception e) {
+			e.printStackTrace();
+			if (file != null && file.exists()) {
+				file.delete();
+			}
+		} finally {
+			if (inStream != null) {
+				try {
+					inStream.close();
+				} catch (IOException e) {
+				}
+			}
+			if (outputStream != null) {
+				try {
+					outputStream.close();
+				} catch (IOException e) {
+				}
+			}
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	/**
+	 * 导入XML
+	 * 
+	 * @param entity
+	 * @return
+	 */
+	private JsonRepresentation importData(Representation entity) {
+		log.dLog("importXML");
+		JSONObject ret = new JSONObject();
+		JSONArray message = new JSONArray();
+		DiskFileItemFactory factory = new DiskFileItemFactory();
+		RestletFileUpload upload = new RestletFileUpload(factory);
+		List<FileItem> items = null;
+		try {
+			items = upload.parseRepresentation(entity);
+		} catch (FileUploadException e) {
+			log.eLog(e);
+		}
+
+		String filename = "";
+		FileItem fi = items.get(0);
+		try {
+			filename = fi.getName();
+			if (filename == null || filename.equals("")
+					|| filename.toLowerCase().trim().indexOf("xml") == -1) {
+				log.eLog("文件格式有误");
+				throw new Exception("文件格式有误");
+			}
+			int num = 0;
+			
+			// 先删除kpi category 以及 kpi
+			cateService.deleteAll();
+			cateService.deleteAllKpi();
+			message.add("正在解析XML，请等待...");
+			MessageResult.broadcast("正在解析XML，请等待...", filename);
+			Map<String, Map<String, Object>> xMap = XmlUtil.parserKpiCateXml(fi
+					.getInputStream());
+			KpiCategory category;
+			Iterator<Entry<String, Map<String, Object>>> iter = xMap.entrySet()
+					.iterator();
+			while (iter.hasNext()) {
+				Entry<String, Map<String, Object>> entry = iter.next();
+				String key = entry.getKey();
+				Map<String, Object> val = entry.getValue();
+				String name = String.valueOf(val.get("name"));
+				message.add("解析分类[" + name + "]...");
+				MessageResult.broadcast("解析分类[" + name + "]...", filename);
+				
+
+				category = new KpiCategory();
+				category.setId(key);
+				category.setName(name);
+
+				cateService.save(category);
+				num++;
+			}
+			message.add("上传分类完成");
+			MessageResult.broadcast("上传分类完成", filename);
+			message.add("成功导入分类[" + num + "]条");
+			MessageResult.broadcast("成功导入分类[" + num + "]条", filename);
+			//
+			ret.put("message", message);
+			log.dLog("importXML success");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private JsonRepresentation editKpiCategory(JSONObject obj) {
+		JSONObject ret = new JSONObject();
+		try {
+			log.dLog("editKpiCategory");
+			if (obj == null || obj.size() == 0) {
+				throw new Exception("editKpiCategory参数不能空");
+			}
+			String id = obj.getString("id");
+			KpiCategory kpiCate = cateService.getById(id);
+			if (kpiCate == null) {
+				throw new Exception("KpiCategory[" + id + "]不存在");
+			}
+			String image = obj.getString("image");
+			//名称和父类不能编辑
+			//kpiCate.setName(obj.containsKey("name") ? obj.getString("name"):"");
+			if (image != null) {
+				int t = image.lastIndexOf('/');
+				if (t != -1)
+					image = image.substring(t + 1, image.length());
+			}
+			kpiCate.setImage(image);
+			kpiCate = cateService.update(kpiCate);
+			Map<String, Object> asMap = kpiCate.toMap();
+			ret.put("data", asMap);
+			ret.put("message", "修改成功");
+		} catch (Exception e) { 
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation deleteAll() {
+		JSONObject ret = new JSONObject();
+		try{
+			cateService.deleteAll();
+			ret.put("message", "删除全部成功");
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	private JsonRepresentation deleteCateById(String id) {
+		JSONObject ret = new JSONObject();
+		try {
+			log.dLog("deleteCateById");
+			if (id == null || id.equals("")) {
+				throw new Exception("参数不能空");
+			}
+			KpiCategory kpiCate = cateService.getById(id);
+			if (kpiCate == null) {
+				throw new Exception("KpiCategory[" + id + "]不存在");
+			}
+			
+			cateService.delete(kpiCate, true);
+			ret.put("message", "删除成功");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+}

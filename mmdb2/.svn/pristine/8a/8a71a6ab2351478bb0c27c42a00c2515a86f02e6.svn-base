@@ -1,0 +1,50 @@
+<tr>
+	<td>
+        <select class="form-control input-small">
+            <option></option>
+            <option>and</option>
+            <option>or</option>
+        </select>
+	</td>
+    <td>
+        <select class="form-control input-small">
+            <option></option>
+            <option>(</option>
+            <option>((</option>
+            <option>(((</option>
+            <option>((((</option>
+        </select>
+    </td>
+    <td>
+        <select class="form-control input-small">
+            <option>host</option>
+            <option>app</option>
+            <option>inst</option>
+            <option>param</option>
+        </select>
+    </td>
+    <td>
+        <select class="form-control input-small">
+            <option>=</option>
+            <option>!=</option>
+            <option>~=</option>
+            <option>!~=</option>
+        </select>
+    </td>
+    <td>
+        <input type="text" class="form-control input-small" placeholder="请输入属性值">
+    </td>
+    <td>
+        <select class="form-control input-small">
+            <option></option>
+            <option>)</option>
+            <option>))</option>
+            <option>)))</option>
+            <option>))))</option>
+        </select>
+    </td>
+    <td data>
+        <i class="glyphicon glyphicon-trash font-blue" data-action="remove">
+        </i>
+    </td>
+</tr>

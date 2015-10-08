@@ -1,0 +1,303 @@
+(function (graph) {
+
+    'use strict';
+
+    var T;
+
+    T = function (jsonData, sidebar) {
+
+        if (typeof jsonData !== 'object') {
+            jsonData = {};
+        }
+
+        return new T.fn.init(jsonData, sidebar);
+    };
+
+    T.fn = T.prototype = {
+        constructor: T,
+        init: function (jsonData, sidebar) {
+            this.KEY = graph.utils.randstr();
+            this.jsonToTree(jsonData);
+            this.sidebar = sidebar;
+        }
+    };
+
+    T.fn.init.prototype = T.fn;
+
+
+// 生成菜单模块
+    (function () {
+
+        var htmlCache = {};
+
+        // 默认配置选项
+        var getOptions = function () {
+
+            return {
+                // 布局方式
+                // option: tree , box
+                layout: 'tree',
+
+                // 图标宽
+                icoWidth: 30,
+
+                // 图标高
+                icoHeight: 30,
+
+                // 拖拽默认宽
+                dragWidth: 80,
+
+                // 拖拽默认高
+                dragHeight: 80,
+
+                // 默认子节点是否展开
+                foldOpen: false,
+
+                // 默认收起折叠按钮的类型
+                // char 字符串
+                // ico 图标
+                foldIcoType: 'char',
+
+                // 隐藏图标 char类型
+                foldIcoHideChar: '+',
+
+                // 开启图标 char类型
+                foldIcoShowChar: '-',
+
+                // 隐藏图标  pic 类型
+                foldIcoHidePic: '+',
+
+                // 开启图标 pic 类型
+                foldIcoShowPic: '-',
+
+                // 模板后缀
+                templateFix: '.html',
+
+
+                // 默认图标
+                ico: '../resource/svg/CI.svg'
+
+            };
+
+        };
+
+        // 更新图标
+        var updateIco = function (element, defaultOptions, sidebar) {
+            $(element).find('.ico').each(function () {
+                sidebar.addImagePalette(
+                    this,
+                    $(this).attr('name'),
+                    $(this).attr('ico'),
+                    defaultOptions.dragWidth,
+                    defaultOptions.dragHeight,
+                    defaultOptions.icoWidth,
+                    defaultOptions.icoHeight
+                );
+            });
+        };
+
+        var treeShow = function (childrenNode, foldElement, defaultOptions) {
+            childrenNode.removeClass('hide').addClass('show');
+            foldElement.html(defaultOptions.foldIcoShowChar);
+        };
+
+        var treeHide = function (childrenNode, foldElement, defaultOptions) {
+            childrenNode.removeClass('show').addClass('hide');
+            foldElement.html(defaultOptions.foldIcoHideChar);
+        };
+
+        // 添加折叠事件
+        var addFoldEvent = function (element, defaultOptions) {
+
+            $(element).find('.node').each(function () {
+                var childrenNode, foldElement;
+
+                childrenNode = $(this).find('>.childrenNode');
+                foldElement = $(this).find('>.pri>.fold');
+
+                if (childrenNode.length >= 1) {
+                    if (defaultOptions.foldOpen) {
+                        treeShow(childrenNode, foldElement, defaultOptions);
+                    } else {
+                        treeHide(childrenNode, foldElement, defaultOptions);
+                    }
+
+                    foldElement.click(function () {
+                        if (childrenNode.is(':visible')) {
+                            treeHide(childrenNode, foldElement, defaultOptions);
+                        } else {
+                            treeShow(childrenNode, foldElement, defaultOptions);
+                        }
+                    });
+
+                } else {
+                    foldElement.attr('class', 'fixMargin');
+                }
+            });
+        };
+
+        T.fn.createMenu = function (element, options) {
+
+            var _this = this,
+                basePath = '',
+                jsonData,
+                defaultOptions,
+                tpl;
+
+            $(element).addClass('jsontree').html('loading...');
+
+            options = typeof options === 'undefined' ? {} : options;
+
+            // 检测element是不是有效值 否则终止操作
+            if (typeof element === 'undefined') {
+                return false;
+            }
+
+            defaultOptions = getOptions();
+            jsonData = _this.getTree();
+
+            // 传入配置项更新默认配置
+            $.each(defaultOptions, function(i) {
+                if (typeof defaultOptions[i] === typeof options[i]) {
+                    defaultOptions[i] = options[i];
+                }
+            });
+
+            if (false && typeof htmlCache[defaultOptions.layout] === 'string') {
+                element.innerHTML = htmlCache[defaultOptions.layout];
+                updateIco(element, defaultOptions);
+                addFoldEvent(element, defaultOptions);
+                return _this;
+            }
+
+            tpl = 'tree/' + defaultOptions.layout + defaultOptions.templateFix;
+
+            switch (defaultOptions.layout) {
+                case 'tree':
+                    (function () {
+                        var crehtmlFun = null,
+                            html;
+
+                        crehtmlFun = function (o) {
+                            var html = [];
+
+                            $.each(o, function () {
+                                var self = this,
+                                    childrenNode = '';
+
+                                if (typeof self.childrenNode === 'object') {
+                                    childrenNode = crehtmlFun(self.childrenNode);
+                                }
+
+                                html.push(graph.utils.render(tpl, {
+                                    name: self.name,
+                                    ico: typeof self.ico === 'string' ? basePath + self.ico : defaultOptions.ico,
+                                    childrenNode: childrenNode,
+                                    layout: defaultOptions.layout
+                                }));
+                            });
+
+                            return html.join('');
+                        };
+
+                        html = crehtmlFun(jsonData);
+                        element.innerHTML = html;
+                        htmlCache[defaultOptions.layout] = html;
+                        updateIco(element, defaultOptions, _this.sidebar);
+                        addFoldEvent(element, defaultOptions);
+
+                    })();
+
+                    break;
+
+                case 'box':
+                    (function () {
+                        var crehtmlFun,
+                            treeToArr = null,
+                            html,
+                            arr = [];
+
+                        crehtmlFun = function (o) {
+                            var html = [];
+
+                            $.each(o, function () {
+                                var self = this;
+
+                                if (typeof self.childrenNode === 'object') {
+                                    treeToArr(self.childrenNode);
+                                }
+
+                                arr.unshift({
+                                    name: self.name,
+                                    ico: typeof self.ico === 'string' ? basePath + self.ico : defaultOptions.ico
+                                });
+
+                                html.push(graph.utils.render(tpl, {
+                                    name: self.name,
+                                    childrenNode: arr,
+                                    layout: defaultOptions.layout
+                                }));
+
+                                arr = [];
+                            });
+
+                            return html.join(graph.utils.render('tree/line1.html'));
+                        };
+
+                        treeToArr = function (o) {
+                            $.each(o, function () {
+                                var self = this;
+
+                                arr.push({
+                                    name: self.name,
+                                    ico: typeof self.ico === 'string' ? basePath + self.ico : defaultOptions.ico
+                                });
+
+                                if (typeof self.childrenNode === 'object') {
+                                    treeToArr(self.childrenNode);
+                                }
+                            });
+                        };
+
+                        html = crehtmlFun(jsonData);
+                        element.innerHTML = html;
+                        htmlCache[defaultOptions.layout] = html;
+                        updateIco(element, defaultOptions, _this.sidebar);
+                        addFoldEvent(element, defaultOptions);
+                    })();
+
+                    break;
+
+                default:
+            }
+
+            return _this;
+        };
+
+    })();
+
+    (function () {
+
+        var tree = {};
+
+        T.fn.jsonToTree = function (param) {
+            var _this = this;
+            _this.setTree({});
+            tree[this.key] = param;
+            return _this;
+        };
+
+        T.fn.getTree = function () {
+            return tree[this.key];
+        };
+
+        T.fn.setTree = function (o) {
+            tree[this.key] = o;
+            return this;
+        };
+
+    })();
+
+    graph.Tree = T;
+
+})(nameSpace.reg('graph'));

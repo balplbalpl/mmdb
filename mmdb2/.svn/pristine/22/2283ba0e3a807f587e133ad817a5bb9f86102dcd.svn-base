@@ -1,0 +1,892 @@
+package com.mmdb.rest.db;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.UnsupportedEncodingException;
+import java.net.URLDecoder;
+import java.sql.Connection;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
+import jdbc.JdbcConnection;
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+import org.apache.commons.fileupload.FileItem;
+import org.apache.commons.fileupload.FileUploadException;
+import org.apache.commons.fileupload.disk.DiskFileItemFactory;
+import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.Form;
+import org.restlet.data.Header;
+import org.restlet.data.Status;
+import org.restlet.ext.fileupload.RestletFileUpload;
+import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.representation.Representation;
+import org.restlet.resource.Delete;
+import org.restlet.resource.Get;
+import org.restlet.resource.Post;
+import org.restlet.resource.Put;
+import org.restlet.resource.ServerResource;
+import org.restlet.util.Series;
+
+import com.mmdb.buz.db.JdbcOtherTools;
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.JsonUtil;
+import com.mmdb.core.utils.SpringContextUtil;
+import com.mmdb.model.bean.User;
+import com.mmdb.model.database.bean.DataBaseConfig;
+import com.mmdb.model.database.bean.DataSourcePool;
+import com.mmdb.service.db.IDataBaseConfigService;
+import com.mmdb.service.db.IDataSourceService;
+import com.mmdb.service.role.IUserService;
+import com.mmdb.service.role.impl.UserService;
+import com.mmdb.util.FileManager;
+import com.mmdb.util.des.Des;
+
+public class HandleDataBaseRest extends ServerResource {
+
+	private Log log = LogFactory.getLogger("HandleDataBaseRest");
+	private IDataSourceService dbSourceService;
+	private IDataBaseConfigService dbConfigService;
+	private IUserService userService;
+
+	@Override
+	public void init(Context context, Request request, Response response) {
+		super.init(context, request, response);
+		dbSourceService = (IDataSourceService) SpringContextUtil
+				.getApplicationContext().getBean("dataSourceService");
+
+		dbConfigService = (IDataBaseConfigService) SpringContextUtil
+				.getApplicationContext().getBean("dbConfigService");
+		userService = (IUserService) SpringContextUtil.getApplicationContext()
+				.getBean("userService");
+		setExisting(true);
+	}
+
+	@Get
+	public Representation getMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+		if (param1 == null || "".equals(param1)) {
+			return getAll();
+		} else if ("export".equals(param1)) {
+			return exportData();
+		}else if ("author".equals(param1)) {
+			String param2 = (String) getRequestAttributes().get("param2");
+			if (param2 != null) {
+				try {
+					param2 = URLDecoder.decode(param2, "utf-8");
+				} catch (UnsupportedEncodingException e) {
+				}
+			}
+			return getByUser(param2);
+		}  else {
+			return getById(param1);
+		}
+	}
+
+	@Post
+	public Representation postMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+			}
+		}
+
+		if ("import".equals(param1)) {
+			return importData(entity);
+		}
+
+		Form form = entity == null ? null : new Form(entity);
+		String operation = null;
+		try {
+			operation = form.getQueryString();
+			operation = URLDecoder.decode(operation, "utf-8");
+			operation = new String(operation.getBytes("iso-8859-1"), "utf-8");
+			JSONObject params = JSONObject.fromObject(operation);
+			if ("test".equals(param1)) {
+				return testConnect(params);
+			} else if ("getschemanames".equals(param1)) {
+				return getSchemaNames(params);
+			} else if ("gettablenamebyschema".equals(param1)) {
+				return getTableNameBySchema(params);
+			} else if ("getfieldnamebytable".equals(param1)) {
+				return getFieldNameByTable(params);
+			} else if ("getmetadatabytable".equals(param1)) {
+				return getMetadataByTable(params);
+			}else if ("getfieldnamebydsid".equals(param1)) {
+				return getFieldNameByDsId(params);
+			} else {
+				return save(params);
+			}
+			
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", "[" + operation + "]解析失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@Put
+	public Representation putMethod(Representation entity) throws Exception {
+		JSONObject ret = new JSONObject();
+
+		ret.put("message", "参数数量不正确");
+		Form form = entity == null ? null : new Form(entity);
+		String operation = null;
+		try {
+			String queryString = form.getQueryString();
+			operation = URLDecoder.decode(queryString, "utf-8");
+			operation = new String(operation.getBytes("iso-8859-1"), "utf-8");
+			JSONObject params = JSONObject.fromObject(operation);
+			if (params.containsKey("id") && params.containsKey("port")
+					&& params.containsKey("type") && params.containsKey("url")
+					&& params.containsKey("database")
+					&& params.containsKey("isRac")
+					&& params.containsKey("username")
+					&& params.containsKey("password")) {
+				return update(params);
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			throw e;
+		}
+
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@Delete
+	public Representation delMethod(Representation entity) throws Exception {
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			param1 = URLDecoder.decode(param1, "utf-8");
+		}
+		try {
+			if (param1 == null || "".equals(param1)) {
+				return deleteAll();
+			} else {
+				return deleteById(param1);
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			throw e;
+		}
+	}
+
+	/**
+	 * 返回一个json格式全部
+	 * 
+	 * @return
+	 * @throws Exception
+	 */
+	private Representation getAll() {
+		JSONObject ret = new JSONObject();
+		try {
+			List<DataBaseConfig> all = dbConfigService.getAll();
+			JSONArray data = new JSONArray();
+			for (DataBaseConfig config : all) {
+				Map<String, String> asMap = config.asMap();
+				data.add(asMap);
+			}
+			ret.put("data", data);
+			ret.put("message", "获取数据库配置成功");
+		} catch (Exception e) {
+			ret.put("message", "获取数据库配置失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+
+	private Representation getByUser(String username) {
+		JSONObject ret = new JSONObject();
+		try {
+			List<DataBaseConfig> all = dbConfigService.getByAuthor(username);
+			JSONArray data = new JSONArray();
+			for (DataBaseConfig config : all) {
+				Map<String, String> asMap = config.asMap();
+				data.add(asMap);
+			}
+			ret.put("data", data);
+			ret.put("message", "获取数据库配置成功");
+		} catch (Exception e) {
+			ret.put("message", "获取数据库配置失败");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	/**
+	 * 通过唯一id获取ciCategory
+	 * 
+	 * @param id
+	 * @return
+	 * @throws Exception
+	 */
+	private Representation getById(String id) {
+		JSONObject ret = new JSONObject();
+		try {
+			log.dLog("getByid");
+			DataBaseConfig config = dbConfigService.getById(id);
+			if (config != null) {
+				Map<String, String> asMap = config.asMap();
+				ret.put("data", asMap);
+				ret.put("message", "获取数据库配置成功");
+			} else {
+				ret.put("message", "数据库配置不存在");
+				getResponse().setStatus(new Status(600));
+			}
+		} catch (Exception e) {
+			ret.put("message", "数据库配置不存在");
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation exportData() {
+		JSONObject ret = new JSONObject();
+
+		log.dLog("getAllForXls");
+		File file = FileManager.getInstance().createFile("databaseConfig",
+				"json");
+		if (!file.exists()) {
+			try {
+				file.createNewFile();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		try {
+			List<DataBaseConfig> dbConfigs = dbConfigService.getAll();
+			Map<String, Map<String, String>> retMap = new HashMap<String, Map<String, String>>();
+			for (DataBaseConfig nc : dbConfigs) {
+				Map<String, String> asMap = nc.asMap();
+				retMap.put(nc.getId(), asMap);
+			}
+			String json = JsonUtil.encodeByJackSon(retMap);
+
+			FileOutputStream fos = null;
+			try {
+				fos = new FileOutputStream(file);
+				fos.write(json.getBytes("utf-8"));
+				fos.flush();
+			} catch (Exception e) {
+			} finally {
+				fos.close();
+			}
+			ret.put("message", "下载数据库配置成功");
+			JSONObject retData = new JSONObject();
+			retData.put("url", file.getName());
+			ret.put("data", retData);
+			log.dLog("exportXML success");
+
+		} catch (Exception e) {
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	@SuppressWarnings("unchecked")
+	private Representation importData(Representation entity) {
+		log.dLog("importXML");
+		JSONObject ret = new JSONObject();
+		DiskFileItemFactory factory = new DiskFileItemFactory();
+		RestletFileUpload upload = new RestletFileUpload(factory);
+
+		List<FileItem> items = null;
+		try {
+			items = upload.parseRepresentation(entity);
+		} catch (FileUploadException e) {
+			log.eLog(e);
+		}
+
+		String filename = "";
+		FileItem fi = items.get(0);
+		try {
+			filename = fi.getName();
+			if (filename == null || filename.equals("")
+					|| filename.toLowerCase().trim().indexOf(".json") == -1) {
+				log.eLog("文件格式有误");
+				ret.put("message", "文件格式有误");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+
+			BufferedReader in = new BufferedReader(new InputStreamReader(
+					fi.getInputStream()));
+			StringBuffer buffer = new StringBuffer();
+			String line = "";
+			while ((line = in.readLine()) != null) {
+				buffer.append(line);
+			}
+			User user = getUser();
+
+			Map<String, Map<String, String>> xMap = JsonUtil.decodeByJackSon(
+					buffer.toString(), Map.class);
+
+			Iterator<Entry<String, Map<String, String>>> iter = xMap.entrySet()
+					.iterator();
+			while (iter.hasNext()) {
+				Entry<String, Map<String, String>> entry = iter.next();
+				String key = entry.getKey();
+				Map<String, String> val = entry.getValue();
+				boolean rac = Boolean.valueOf(val.get("isRac").toString());
+				DataBaseConfig dc = dbConfigService.getById(key);
+				if (dc == null) {
+					dc = new DataBaseConfig(rac, val);
+					dc.setId(key);
+					dbConfigService.save(dc);
+				} else {
+					String type = val.get("type");
+					String username = val.get("username");
+					String password = val.get("password");
+					if (rac) {
+						String addressUrl = val.get("url");
+						dc.setRacAddress(addressUrl);
+					} else {
+						String hostName = val.get("url");
+						int port = Integer.valueOf(val.get("port"));
+						String dataBaseName = val.get("database");
+						dc.setHostName(hostName);
+						if (type.equals("oracle") || type.equals("db2")) {
+							if (dataBaseName == null || dataBaseName.equals("")) {
+								throw new Exception("数据库[" + key + "]实例不能为空");
+							}
+							dc.setDatabaseName(dataBaseName);
+						}
+						dc.setPort(port);
+					}
+					dc.setRac(rac);
+					dc.setType(type);
+					dc.setUsername(username);
+					dc.setPassword(password);
+					String author = val.get("author");
+					if(author==null||"".equals(author)){
+						author = user.getLoginName();
+					}
+					dc.setAuthor(author);
+					dbConfigService.update(dc);
+				}
+			}
+			// ret.setMessage("导入数据库配置成功");
+			ret.put("message", "导入数据库配置成功");
+			log.dLog("importDataBaseConfig success");
+		} catch (Exception e) {
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	/**
+	 * 测试连接是否能用
+	 * 
+	 * @return
+	 */
+	private JsonRepresentation testConnect(JSONObject dbMap) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("testing");
+			if (dbMap == null || dbMap.size() == 0) {
+				throw new Exception("数据库配置参数不能空");
+			}
+			boolean isRac = dbMap.getBoolean("isRac");
+//			String rac = dbMap.getString("isRac");
+//			if (rac != null && rac.equals("true")) {
+//				isRac = true;
+//			}
+			new DataBaseConfig(isRac, dbMap);
+			connection = JdbcOtherTools.getConnection(isRac, dbMap);
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			ret.put("data", dbMap);
+			ret.put("message", "数据库连接成功");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	/**
+	 * 保存
+	 * 
+	 * @param dbMap
+	 * @return
+	 * @throws Exception
+	 */
+	private JsonRepresentation save(JSONObject dbMap) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("saveDataBaseConfig");
+			if (dbMap == null || dbMap.size() == 0) {
+				throw new Exception("DataSource参数不能空");
+			}
+			String name = (String) dbMap.get("name");
+			if (name == null || name.equals("")) {
+				throw new Exception("名称不能空");
+			}
+			
+			// 增加id处理防止重复
+			String type = (String) dbMap.get("type");
+			if (type != null) {
+//				id = type + "_" + id;
+				dbMap.put("name", name);
+			}
+
+			DataBaseConfig dc = dbConfigService.getByName(name);
+//			if (dc != null) {
+//				throw new Exception("DataSource[" + name + "]已存在");
+//			}
+			boolean isRac = dbMap.getBoolean("isRac");
+//			String rac = (String) dbMap.get("isRac");
+//			if (rac != null && rac.equals("true")) {
+//				isRac = true;
+//			}
+			dc = new DataBaseConfig(isRac, dbMap);
+			//增加作者
+			User user = getUser();
+			dc.setAuthor(user.getLoginName());
+			connection = JdbcOtherTools.getConnection(isRac, dbMap);
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			dc = dbConfigService.save(dc);
+			ret.put("data", dc.asMap());
+			ret.put("message", "保存成功");
+		} catch (Exception e) { 
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private JsonRepresentation update(JSONObject dbMap) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("update DataBaseConfig");
+			if (dbMap == null || dbMap.size() == 0) {
+				throw new Exception("DataSource参数不能空");
+			}
+			String id = dbMap.getString("id");
+			DataBaseConfig dc = dbConfigService.getById(id);
+			if (dc == null) {
+				throw new Exception("DataSource[" + id + "]不存在");
+			}
+			boolean isRac = dbMap.getBoolean("isRac");
+//			String rac = dbMap.getString("isRac");
+//			if (rac != null && rac.equals("true")) {
+//				isRac = true;
+//			}
+			new DataBaseConfig(isRac, dbMap);
+			connection = JdbcOtherTools.getConnection(isRac, dbMap);
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			dc.setType(dbMap.getString("type"));
+			dc.setRac(isRac);
+			if (isRac) {
+				dc.setRacAddress(dbMap.getString("url"));
+			} else {
+				dc.setDatabaseName(dbMap.getString("database"));
+				dc.setPort(Integer.valueOf(dbMap.getString("port")));
+				dc.setHostName(dbMap.getString("url"));
+			}
+			dc.setUsername(dbMap.getString("username"));
+			dc.setPassword(dbMap.getString("password"));
+			dc = dbConfigService.update(dc);
+			ret.put("data", dc.asMap());
+			ret.put("message", "更新成功");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private Representation deleteAll() {
+		JSONObject ret = new JSONObject();
+		getResponse().setStatus(new Status(600));
+		ret.put("message", "不支持删除全部");
+		return new JsonRepresentation(ret.toString());
+	}
+
+	private JsonRepresentation deleteById(String id) {
+		JSONObject ret = new JSONObject();
+		try {
+			log.dLog("deleteDataBaseConfigById");
+			if (id == null || id.equals("")) {
+				throw new Exception("参数不能空");
+			}
+			DataBaseConfig dc = dbConfigService.getById(id);
+			if (dc == null) {
+				throw new Exception("DataSource[" + id + "]不存在");
+			}
+			if (dbSourceService.getDataConfigIds().contains(dc.getId())) {
+				throw new Exception("该DataSource已被配置成DataSet，请先删除DataSet");
+			}
+			dbConfigService.delete(dc);
+			ret.put("message", "删除成功");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	/**
+	 * 通过数据库连接获取SCHEMA
+	 * 
+	 * @return
+	 */
+	private JsonRepresentation getSchemaNames(JSONObject params) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("getSchemaNames");
+			if (params == null || params.size() == 0) {
+				throw new Exception("通过数据库连接获取SCHEMA参数不能空");
+			}
+			String dcId = params.getString("dcId");
+			if (dcId == null || dcId.equals("")) {
+				throw new Exception("数据库连接ID不能空");
+			}
+			DataBaseConfig dc = dbConfigService.getById(dcId);
+			if (dc == null) {
+				throw new Exception("DataSource[" + dcId + "]不存在");
+			}
+			connection = JdbcOtherTools.getConnection(dc.getRac(), dc.asMap());
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			List<String> schemas = JdbcConnection.getDatabases(connection);
+			ret.put("schemas", schemas);
+			ret.put("message", "获取SCHEMA成功");
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	/**
+	 * 通过数据库连接和SCHEMA获取表和视图
+	 * 
+	 * @return
+	 */
+	private JsonRepresentation getTableNameBySchema(JSONObject params) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("getTableNameBySchema");
+			if (params == null || params.size() == 0) {
+				throw new Exception("通过数据库连接和SCHEMA获取表和视图参数不能空");
+			}
+			String dcId = params.getString("dcId");
+			if (dcId == null || dcId.equals("")) {
+				throw new Exception("数据库连接ID不能空");
+			}
+			DataBaseConfig dc = dbConfigService.getById(dcId);
+			if (dc == null) {
+				throw new Exception("DataSource[" + dcId + "]不存在");
+			}
+			connection = JdbcOtherTools.getConnection(dc.getRac(), dc.asMap());
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			if(params.containsKey("schema")&&params.getString("schema").length()>0){
+				String schemaName = params.getString("schema");
+				Map<String, List<String>> tables = JdbcConnection.getTables(connection, schemaName);
+				if (tables == null) {
+					throw new Exception("获取数据库表失败");
+				}else{
+					ret = JSONObject.fromObject(tables);
+					ret.put("message", "获取表名成功");
+				}
+			}else{
+				throw new Exception("SCHEMA值不能空");
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	/**
+	 * 通过数据库连接、SCHEMA和表名获取字段名
+	 * 
+	 * @return
+	 */
+	private JsonRepresentation getFieldNameByTable(JSONObject params) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("getFieldNameByTable");
+			if (params == null || params.size() == 0) {
+				throw new Exception("通过数据库连接、SCHEMA和表名获取字段名参数不能空");
+			}
+			String dcId = params.getString("dcId");
+			if (dcId == null || dcId.equals("")) {
+				throw new Exception("数据库连接ID不能空");
+			}
+			DataBaseConfig dc = dbConfigService.getById(dcId);
+			if (dc == null) {
+				throw new Exception("DataSource[" + dcId + "]不存在");
+			}
+			connection = JdbcOtherTools.getConnection(dc.getRac(), dc.asMap());
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			String schemaName = null;
+			if(params.containsKey("schema")){
+				schemaName = params.getString("schema");
+			}
+			String tableName = null;
+			if(params.containsKey("table")){
+				tableName = params.getString("table");
+			}
+			String customSql = null;
+			if(params.containsKey("customSql")){
+				customSql = params.getString("customSql");
+			}
+			if(schemaName!=null){
+				boolean isSelf = params.getBoolean("isSelf");
+				Map<String, Map<String, String>> columns = null;
+				if(isSelf){//取自定义SQL
+					if(customSql!=null&&customSql.length()>0){
+						columns = JdbcConnection.getColumns(connection, schemaName, "", customSql);
+					}else{
+						throw new Exception("自定义SQL不能空");
+					}
+				}else{//取表
+					if(tableName!=null&&tableName.length()>0){
+						columns = JdbcConnection.getColumns(connection, schemaName, tableName, "");
+					}else{
+						throw new Exception("表名不能空");
+					}
+				}
+				if (columns == null) {
+					throw new Exception("获取DataSource字段失败");
+				}
+				JSONObject data = JSONObject.fromObject(columns);
+				ret.put("data", data);
+				ret.put("message", "获取DataSource字段成功");
+			}else{
+				throw new Exception("SCHEMA值不能空");
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	
+	/**
+	 * 通过数据集的ID获取字段名
+	 * 
+	 * @param json{dsId:1239987478978213}
+	 * 
+	 * @return JsonRepresentation
+	 */
+	private JsonRepresentation getFieldNameByDsId(JSONObject params) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("getFieldNameByDcId");
+			if (params == null || params.size() == 0) {
+				throw new Exception("参数不能空");
+			}
+			String dsId = params.getString("dsId");
+			if (dsId == null || dsId.equals("")) {
+				throw new Exception("数据库连接ID不能空");
+			}
+			DataSourcePool dp = dbSourceService.getById(dsId);
+			
+			//获取数据库配置连接
+			String dcId = dp.getDatabaseConfigId();
+			DataBaseConfig dc = dbConfigService.getById(dcId);
+			if (dc == null) {
+				throw new Exception("DataSource[" + dcId + "]不存在");
+			}
+			connection = JdbcOtherTools.getConnection(dc.getRac(), dc.asMap());
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			String schemaName  = dp.getSchema();
+			
+			String tableName  = dp.getTableName();
+			
+			String customSql = dp.getCustomSql();
+			
+			if(schemaName!=null){
+				boolean isSelf = dp.isSelf();
+				Map<String, Map<String, String>> columns = null;
+				if(isSelf){//取自定义SQL
+					if(customSql!=null&&customSql.length()>0){
+						columns = JdbcConnection.getColumns(connection, schemaName, "", customSql);
+					}else{
+						throw new Exception("自定义SQL不能空");
+					}
+				}else{//取表
+					if(tableName!=null&&tableName.length()>0){
+						columns = JdbcConnection.getColumns(connection, schemaName, tableName, "");
+					}else{
+						throw new Exception("表名不能空");
+					}
+				}
+				if (columns == null) {
+					throw new Exception("获取DataSource字段失败");
+				}
+				JSONObject data = JSONObject.fromObject(columns);
+				ret.put("data", data);
+				ret.put("message", "获取DataSource字段成功");
+			}else{
+				throw new Exception("SCHEMA值不能空");
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	/**
+	 * 通过数据库连接和SQL获取结果集
+	 * 
+	 * @return
+	 */
+	private JsonRepresentation getMetadataByTable(JSONObject params) {
+		JSONObject ret = new JSONObject();
+		Connection connection = null;
+		try {
+			log.dLog("getMetadataByTable");
+			if (params == null || params.size() == 0) {
+				throw new Exception("通过数据库连接和SQL获取结果集");
+			}
+			String dcId = params.getString("dcId");
+			if (dcId == null || dcId.equals("")) {
+				throw new Exception("数据库连接ID不能空");
+			}
+			DataBaseConfig dc = dbConfigService.getById(dcId);
+			if (dc == null) {
+				throw new Exception("DataSource[" + dcId + "]不存在");
+			}
+			connection = JdbcOtherTools.getConnection(dc.getRac(), dc.asMap());
+			if (connection == null) {
+				throw new Exception("数据库连接失败");
+			}
+			String schemaName = null;
+			if(params.containsKey("schema")){
+				schemaName = params.getString("schema");
+			}
+			String tableName = null;
+			if(params.containsKey("table")){
+				tableName = params.getString("table");
+			}
+			String customSql = null;
+			if(params.containsKey("customSql")){
+				customSql = params.getString("customSql");
+			}
+			if(schemaName!=null){
+				boolean isSelf = params.getBoolean("isSelf");
+				Integer page = params.getInt("page");
+				Integer pageSize = params.getInt("pageSize");
+				List<Map<String, Object>> data = null;
+				if(isSelf){//取自定义SQL
+					if(customSql!=null&&customSql.length()>0){
+						data = JdbcConnection.getDataByTable(connection, schemaName, "", customSql, (page - 1) * pageSize + 1, page * pageSize);
+					}else{
+						throw new Exception("自定义SQL不能空");
+					}
+				}else{//取表
+					if(tableName!=null&&tableName.length()>0){
+						data = JdbcConnection.getDataByTable(connection, schemaName, tableName, "", (page - 1) * pageSize + 1, page * pageSize);
+					}else{
+						throw new Exception("表名不能空");
+					}
+				}
+				if (data == null) {
+					throw new Exception("获取数据库表数据失败");
+				}
+				int count = JdbcConnection.getCountSize(connection, schemaName, tableName, customSql);
+				ret.put("count", count);
+				ret.put("page", page);
+				ret.put("pageSize", pageSize);
+				ret.put("datas", data);
+				ret.put("message", "获取数据库表数据成功");
+			}else{
+				throw new Exception("SCHEMA值不能空");
+			}
+		} catch (Exception e) {
+			log.eLog(e);
+			ret.put("message", e.getMessage());
+			getResponse().setStatus(new Status(600));
+		} finally {
+			JdbcOtherTools.closeConnection(connection);
+		}
+		return new JsonRepresentation(ret.toString());
+	}
+	
+	public User getUser() {
+		Series<Header> headers = getRequest().getHeaders();
+		String values = headers.getValues("token");
+		Des des = new Des();
+		String decrypt = des.decrypt(values);
+
+		String[] split = decrypt.split("\\|");
+
+		User user = userService.getUserByLoginName(split[0]);
+		return user;
+	}
+}

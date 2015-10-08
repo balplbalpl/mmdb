@@ -1,0 +1,92 @@
+<div class="whiteBg">
+</div>
+<div ng-joy-ride="startJoyRide" config="config" on-finish="onFinish()"  on-skip="onFinish()"></div>
+<!-- BEGIN HEADER -->
+<header>
+	<div class="header-body">
+		<div class="logo">
+			<img src="assets/images/logo.svg" />
+		</div>
+
+		<button class="btn btn-info btn-xs" ng-click="LAYOUT.collapsedSidebar = !LAYOUT.collapsedSidebar" style="position: absolute; left: 170px; top: 13px;">
+			<i class="fa fa-bars"></i>
+		</button>
+
+		<div class="header-body-right">
+			<input type="text" class="input-search input_search_navigator" ng-enter="search()" ng-model="keyword" />
+		</div>
+
+		<div class="userIcon dropdown">
+			<div data-toggle="dropdown">
+				<div ng-show="isAdmin" class="isAdminDiv">Admin</div>
+				<img src="{{currentUserIcon}}" />
+			</div>
+			<ul class="dropdown-menu dropdown-menu-right userDropMenu" aria-labelledby="dropdownMenu" aria-haspopup="false" aria-expanded="false">
+				<li class="dropdown-header" >{{loginName}}</li>
+				<li role="separator" class="divider"></li>
+				<li><a ng-click = setting();>设置</a></li>
+				<li><a ng-click="logout()">注销</a></li>
+				<!--<li><a ng-click="userGroup('home.group.list.private')">使用组合视图向导</a></li>-->
+				<li><a ng-click="showKeyMap()">快捷鍵</a></li>
+			</ul>
+		</div>
+	</div>
+</header>
+
+<div class="main-box">
+
+	<div class="main-box-right" >
+		<div class="main-box-right-content" ui-view>
+		</div>
+	</div>
+
+	<div class="sidebar">
+		<ul class="sidebar-ul">
+
+			<li class="sidebar-item" ui-sref="home.user.overview" ui-sref-active="active">
+				<div class="sidebar-icon sidebar-icon-user"></div>
+				<span>用户</span>
+				<i class="sidebar-item-separate"></i>
+			</li>
+
+			<li class="sidebar-item" ui-sref="home.edit" ui-sref-active="active">
+				<div class="sidebar-icon sidebar-icon-edit"></div>
+				<span>绘图</span>
+				<i class="sidebar-item-separate"></i>
+			</li>
+
+			<li class="sidebar-item" ui-sref="home.view" ui-sref-active="active">
+				<div class="sidebar-icon sidebar-icon-copy"></div>
+				<span>视图</span>
+				<i class="sidebar-item-separate"></i>
+			</li>
+
+			<li class="sidebar-item" ui-sref="home.group.list.private" ng-class="{active: $state.includes('home.group')}">
+				<div class="sidebar-icon sidebar-icon-grid"></div>
+				<span>组合视图</span>
+				<i class="sidebar-item-separate"></i>
+			</li>
+
+			<li class="sidebar-item" ui-sref="home.monitor" ui-sref-active="active">
+				<div class="sidebar-icon sidebar-icon-graph"></div>
+				<span>监控</span>
+				<i class="sidebar-item-separate"></i>
+			</li>
+
+			<li class="sidebar-item">
+				<div class="sidebar-icon sidebar-icon-setting"></div>
+				<span>设置</span>
+				<i class="sidebar-item-separate"></i>
+			</li>
+
+			<li class="sidebar-item" ui-sref="home.search.home" ng-class="{active: $state.includes('home.search')}">
+				<div class="sidebar-icon sidebar-icon-search"></div>
+				<span>搜索</span>
+				<i class="sidebar-item-separate"></i>
+			</li>
+
+		</ul>
+
+	</div>
+
+</div>

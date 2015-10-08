@@ -1,0 +1,229 @@
+(function(graph){
+
+	'use strict';
+
+	var initCi,
+		initTableCi,
+		cilib = {},
+		viewlib = {},
+		tableContainer,
+		initView,
+		writeTableView,
+		search,
+		format,
+		writeTableCi;
+
+    graph.onload = function(){
+        graph.header();
+
+		if(urlParams.q){
+            $('#searchInput').val(decodeURIComponent(urlParams.q));
+			search(decodeURIComponent(urlParams.q));
+		}
+	};
+
+	search = function(value){
+		var result = graph.api.queryViewOrCiFuzzy(value);
+		if(graph.utils.isTrueRet(result)){
+			initCi(result.data.ci);
+			initView(result.data.view);
+		}
+	};
+
+	writeTableView = function(data){
+		var editor, suee, $main, container, map = {};
+
+		$('body').append(graph.utils.render('search/suee'));
+		suee = $('.sueeGraph').last();
+		container = suee.find('.graphcontainer')[0];
+		editor = graph.utils.getEditor(container);
+		container.style.backgroundImage = '';
+		editor.graph.setEnabled(false);
+		editor.zoomLock = true;
+
+		$main = $('#viewResult');
+		$main.append(graph.utils.render('search/box', {list: data}));
+
+		$.each(data, function(){
+			map[this._neo4jid_] = this;
+		});
+
+		$main.find('*[data-action=full]').each(function(){
+			$(this).click(function(){
+				var item = map[$(this).attr('data-id')];
+				graph.utils.openXml(editor, item.xml);
+				$('#fullViewName').html(item.name);
+				$('#fullCateName').html(item._category_);
+				suee.removeClass('sueeHide');
+				suee.addClass('sueeShow');
+			});
+		});
+
+		suee.find('button').click(function(){
+			suee.removeClass('sueeShow');
+			suee.addClass('sueeHide');
+		});
+	};
+
+	writeTableCi = function(data){
+		var id;
+		id = graph.utils.randstr();
+		graph.utils.render('search/item', {
+			list : data,
+			id : id
+		}, function(html){
+			var $main = $('#ciResult');
+			$main.html(html);
+			tableContainer = $main.find('#' + id);
+			initTableCi();
+		});
+	};
+
+	format = function(obj){
+		var o = {};
+		o.head = obj.head;
+		o.row = [];
+		$.each(obj.row, function(){
+			var arr = [],
+				_this = this;
+			$.each(obj.head, function(){
+				arr.push(_this[this]);
+			});
+			o.row.push(arr);
+		});
+
+		return o;
+	};
+
+    initTableCi = function() {
+
+        function fnFormatDetails(oTable, nTr) {
+            var key, i, attr = {}, allow, result, ret;
+
+            oTable = null;
+
+        	allow = {
+        		'一级分类' : true,
+        		'二级分类' : true,
+        		'三级分类' : true,
+        		'icon'	: true
+        	};
+
+			key = $(nTr).attr('ciid');
+
+			for(i in cilib[key].config){
+				if(i.substr(0, 1) !== '_' && !allow[i]){
+					attr[i] = cilib[key].config[i];
+				}
+			}
+
+			// event / perf / change / ticket change render tpl url to search/detailCiAll
+			// then search/detailCi
+			ret = graph.utils.render('search/detailCiAll', {
+				attr : attr,
+				event: format(cilib[key].event),
+				perf : format(cilib[key].perf),
+				change: format(cilib[key].change),
+				ticket: format(cilib[key].ticket),
+				icon : '../' + cilib[key].config.icon
+			});
+
+			result = graph.api.getViewByCiNeoIds(key);
+			if(graph.utils.isTrueRet(result) && result.data[key].length >= 1){
+				window.setTimeout(function(){
+					var container, list = [];
+
+					container = $(nTr).next().find('.outline-graph');
+					container.height(container.width() * 0.4);
+					container.css('position', 'relative');
+
+					$.each(result.data[key], function(){
+						var _this = this;
+
+						list.push({
+							id: _this._neo4jid_,
+							name: [_this._category_, _this.name].join(' | '),
+							img: _this.imageUrl,
+							xml: _this.xml
+						});
+					});
+
+					new graph.Outline(list, container[0], {
+						btnColor: '#FFFFFF',
+						count: result.data[key].length > 4 ? 4 : result.data[key].length,
+						layout: 'left',
+						outLineSize: 0.9,
+						toolbarBgColor: '#D9EDF7',
+						toolbarSize: 130
+					});
+
+				}, 20);
+			}
+
+            return ret;
+        }
+
+        var nCloneTh = document.createElement( 'th' );
+        var nCloneTd = document.createElement( 'td' );
+		var span = document.createElement('span');
+		span.className = 'row-details row-details-close';
+        nCloneTd.innerHTML = span.outerHTML;
+
+        tableContainer.find('thead tr').each( function () {
+            this.insertBefore( nCloneTh, this.childNodes[0] );
+        });
+
+        tableContainer.find('tbody tr').each( function () {
+            this.insertBefore(  nCloneTd.cloneNode( true ), this.childNodes[0] );
+        });
+
+        var oTable = tableContainer.dataTable( {
+            'aoColumnDefs': [
+                {'bSortable': false, 'aTargets': [ 0 ] }
+            ],
+            'aaSorting': [[1, 'asc']],
+			'oLanguage': {
+				sInfo: '共找到 _TOTAL_ 条记录，当前显示(_START_ 到 _END_)',
+				sSearch: '在结果中查找： _INPUT_',
+				sLengthMenu: '每页显示  _MENU_ 条记录'
+			},
+            'aLengthMenu': [
+                [5, 10, 15, 20, -1],
+                [5, 10, 15, 20, 'All'] // change per page values here
+            ],
+            // set the initial value
+            'iDisplayLength': 10
+        });
+
+		var $dom = jQuery('#sample_1_wrapper').find('.dataTables_filter');
+		$dom.find('input').addClass('form-control input-small');
+		$dom.find('select').addClass('form-control input-small');
+		$dom.find('select').select2();
+
+        tableContainer.on('click', ' tbody td .row-details', function () {
+            var nTr = $(this).parents('tr')[0];
+            if ( oTable.fnIsOpen(nTr) ) {
+                $(this).addClass('row-details-close').removeClass('row-details-open');
+                oTable.fnClose( nTr );
+            }else {
+                $(this).addClass('row-details-open').removeClass('row-details-close');
+                oTable.fnOpen( nTr, fnFormatDetails(oTable, nTr), 'details' );
+            }
+        });
+    };
+
+	initCi = function(data){
+		writeTableCi(data);
+		$.each(data, function(){
+			cilib[this.config._neo4jid_] = this;
+		});
+	};
+
+	initView = function(data){
+		writeTableView(data);
+		$.each(data, function(){
+			viewlib[this._neo4jid_] = this;
+		});
+	};
+
+})(nameSpace.reg('graph'));

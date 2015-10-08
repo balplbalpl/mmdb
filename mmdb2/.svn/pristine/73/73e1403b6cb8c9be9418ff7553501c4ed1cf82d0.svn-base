@@ -1,0 +1,84 @@
+package com.mmdb.rest.info;
+
+import java.io.UnsupportedEncodingException;
+import java.net.Inet4Address;
+import java.net.URLDecoder;
+import java.net.UnknownHostException;
+
+import javax.servlet.http.HttpServletRequest;
+
+import net.sf.json.JSONObject;
+
+import org.restlet.Context;
+import org.restlet.Request;
+import org.restlet.Response;
+import org.restlet.data.Status;
+import org.restlet.engine.adapter.HttpRequest;
+import org.restlet.engine.adapter.ServerCall;
+import org.restlet.ext.json.JsonRepresentation;
+import org.restlet.ext.servlet.internal.ServletCall;
+import org.restlet.representation.Representation;
+import org.restlet.resource.Get;
+import org.restlet.resource.ServerResource;
+
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.mmdb.core.utils.ProjectInfo;
+
+/**
+ * 给前台提供 ip地址,端口号
+ * 
+ * @author xiongjian
+ * 
+ */
+public class ServerInfoRest extends ServerResource {
+	private Log log = LogFactory.getLogger("ServerInfoRest");
+
+	@Override
+	public void init(Context context, Request request, Response response) {
+		super.init(context, request, response);
+	}
+
+	@Get
+	public Representation getMethod(Representation entity) {
+		JSONObject ret = new JSONObject();
+		String param1 = (String) getRequestAttributes().get("param1");
+		if (param1 != null) {
+			try {
+				param1 = URLDecoder.decode(param1, "utf-8");
+			} catch (UnsupportedEncodingException e) {
+				log.eLog(e);
+				ret.put("message", "[" + param1 + "]解析失败");
+				getResponse().setStatus(new Status(600));
+				return new JsonRepresentation(ret.toString());
+			}
+		}
+
+		return getWebSocketHost();
+	}
+
+	/**
+	 * 返回websocket的地址
+	 * <p >
+	 * 例如: 192.168.1.187:8080/mmdb2/websocket
+	 */
+	private Representation getWebSocketHost() {
+		JSONObject ret = new JSONObject();
+		ServerCall httpCall = ((HttpRequest) getRequest()).getHttpCall();
+		ServletCall call = (ServletCall) httpCall;
+		System.out.println(call.getRequest().getLocalName());
+		String ip = "127.0.0.1";
+		try {
+			ip = Inet4Address.getLocalHost().getHostAddress();
+		} catch (UnknownHostException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
+		ret.put("data",
+				 ip + ":"
+						+ call.getRequest().getLocalPort() + "/"
+						+ ProjectInfo.getProjectName() + "/websocket");
+		return new JsonRepresentation(ret.toString());
+	}
+}

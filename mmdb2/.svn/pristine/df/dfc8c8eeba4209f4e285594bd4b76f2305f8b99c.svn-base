@@ -1,0 +1,1855 @@
+package com.mmdb.ruleEngine;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import org.apache.zookeeper.data.Stat;
+
+import net.sf.json.JSONArray;
+import net.sf.json.JSONObject;
+
+import com.datastax.driver.core.Cluster;
+import com.datastax.driver.core.ResultSet;
+import com.datastax.driver.core.Row;
+import com.datastax.driver.core.Session;
+import com.mmdb.core.log.Log;
+import com.mmdb.core.log.LogFactory;
+import com.netflix.curator.framework.CuratorFramework;
+import com.netflix.curator.framework.CuratorFrameworkFactory;
+import com.netflix.curator.retry.RetryNTimes;
+
+public class CDao {
+	private static Log log = LogFactory.getLogger("CDao");
+	private String zkUrl;
+	private static Cluster cluster = null;
+	private static Session session = null;
+	public static JSONArray eventAttrs = null;
+	public static List<JSONObject> blackList = new ArrayList<JSONObject>();
+	public static String amqUrl = null;
+	public static String kpiQueue = null;
+	public static String gisKpiQueue = null;
+	
+	public String getZkUrl() {
+		return zkUrl;
+	}
+
+	public void setZkUrl(String zkUrl) {
+		this.zkUrl = zkUrl;
+	}
+	//初始化
+	public void open(){
+		CuratorFramework zkClient = null;
+		try{
+			zkClient = CuratorFrameworkFactory.builder().connectString(zkUrl).retryPolicy(new RetryNTimes(Integer.MAX_VALUE, 1000)).connectionTimeoutMs(5000).build(); 
+			zkClient.start();
+			Stat exist = zkClient.checkExists().forPath("/conf/base/cassandraNodes");
+			String cassandraNodes = null;
+			if(exist!=null){
+				cassandraNodes = new String(zkClient.getData().forPath("/conf/base/cassandraNodes"), "utf-8");
+			}
+			exist = zkClient.checkExists().forPath("/conf/base/eventAttrs");
+			if(exist!=null){
+				eventAttrs = JSONArray.fromObject(new String(zkClient.getData().forPath("/conf/base/eventAttrs"), "utf-8"));
+			}
+			exist = zkClient.checkExists().forPath("/conf/base/activemqUrl");
+			if(exist!=null){
+				amqUrl = new String(zkClient.getData().forPath("/conf/base/activemqUrl"), "utf-8");
+			}
+			exist = zkClient.checkExists().forPath("/conf/base/kpiQueueName");
+			if(exist!=null){
+				kpiQueue = new String(zkClient.getData().forPath("/conf/base/kpiQueueName"), "utf-8");
+			}
+			exist = zkClient.checkExists().forPath("/conf/base/kpiGisQueueName");
+			if(exist!=null){
+				gisKpiQueue = new String(zkClient.getData().forPath("/conf/base/kpiGisQueueName"), "utf-8");
+			}
+			if(zkClient!=null){
+				zkClient.close();
+			}
+			zkClient = null;
+			if(cluster==null&&cassandraNodes!=null){
+				cluster = Cluster.builder().addContactPoints(cassandraNodes.split(",")).build();
+				session = cluster.connect();
+				initCassandraTable();
+			}
+		}catch(Exception e){
+//			e.printStackTrace();
+			log.eLog("cant connect to cassandra");
+			log.eLog(e.getMessage());
+			if(session!=null){
+				session.close();
+			}
+			session = null;
+			return;
+		}finally{
+			if(zkClient!=null){
+				zkClient.close();
+			}
+			zkClient = null;
+		}
+	}
+	
+	private void initCassandraTable(){
+		try{
+			try{
+				session.execute("select * from perf.perfdata limit 1;");
+			}catch(Exception e){
+				if("Keyspace perf does not exist".equals(e.getMessage())){
+					session.execute("CREATE KEYSPACE perf WITH replication = {'class':'SimpleStrategy', 'replication_factor':1};");
+					session.execute("create table perf.event_info(eid text,ip text,hostname text,severity text,status text,msg text,app text,inst text,param text,original_severity text,arrivaltime bigint,modifytime bigint,tally bigint,primary key(eid));");
+					session.execute("create table perf.event_ci(ci text,arrivaltime bigint,eids text,primary key(ci,arrivaltime));");
+					session.execute("create table perf.event_ci_modify(ci text,modifytime bigint,eids text,primary key(ci,modifytime));");
+					session.execute("create table perf.ciset_event(ci text,primary key(ci));");
+					session.execute("create table perf.eid_ci(eid text,cis text,primary key(eid));");
+					session.execute("create table perf.event_ci_impact(ci text,arrivaltime bigint,eids text,primary key(ci,arrivaltime));");
+					session.execute("create table perf.event_ci_modify_impact(ci text,modifytime bigint,eids text,primary key(ci,modifytime));");
+					session.execute("create table perf.eid_ci_impact(eid text,cis text,primary key(eid));");
+					session.execute("create table perf.impact_blacklist(id bigint,name text,rule text,description text,primary key(id));");
+					session.execute("create table perf.perfdes(key text,primary key(key));");
+					session.execute("create table perf.separatetime(key text,time bigint,primary key(key,time));");
+					session.execute("create table perf.perfdata(key text,time bigint,rawtime bigint,val double,primary key(key,time));");
+					session.execute("create table perf.kpi_ci(ci text,kpis text,primary key(ci));");
+					session.execute("create table perf.ticket_info(tid text,title text,severity text,status text,msg text,excute_person text,impact_app text,event_id text,arrivaltime bigint,modifytime bigint,primary key(tid));");
+					session.execute("create table perf.ticket_ci(ci text,arrivaltime bigint,tids text,primary key(ci,arrivaltime));");
+					session.execute("create table perf.ticket_ci_modify(ci text,modifytime bigint,tids text,primary key(ci,modifytime));");
+					session.execute("create table perf.ciset_ticket(ci text,primary key(ci));");
+					session.execute("create table perf.tid_ci(tid text,cis text,primary key(tid));");
+					session.execute("create table perf.change_info(chid text,title text,severity text,status text,type text,msg text,submit_person text,approve_person text,excute_person text,impact_app text,stop_service_flag text,arrivaltime bigint,real_start_time bigint,real_end_time bigint,plan_start_time bigint,plan_end_time bigint,primary key(chid));");
+					session.execute("create table perf.change_ci(ci text,arrivaltime bigint,chids text,primary key(ci,arrivaltime));");
+					session.execute("create table perf.ciset_change(ci text,primary key(ci));");
+					session.execute("create table perf.chid_ci(chid text,cis text,primary key(chid));");
+					session.execute("create table perf.dcv_children(scid text,children text,primary key(scid));");
+				}
+			}
+		}catch(Exception e){
+			log.eLog(e.getMessage());
+			e.printStackTrace();
+		}
+	}
+	
+	/**
+	 * 获取所有已匹配的KPI
+	 * 
+	 * **/
+	public static Set<String> getKpiSet(){
+		try{
+			Set<String> result = new HashSet<String>();
+			ResultSet rs = session.execute("SELECT * FROM perf.kpi_ci;");
+			if(rs!=null){
+				for (Row row : rs) {
+					JSONArray jsArr = JSONArray.fromObject(row.getString("kpis"));
+					for(int i=0;i<jsArr.size();i++){
+						JSONObject jsObj = jsArr.getJSONObject(i);
+						result.add(jsObj.toString());
+					}
+				}
+			}
+			return result;
+		}catch(Exception e){
+			log.eLog(e.getMessage());
+			return new HashSet<String>();
+		}
+	}
+	
+	/**
+	 * 插入匹配的KPI
+	 * 
+	 * **/
+	public static void addCiKpi(JSONArray cis, JSONObject kpi){
+		try{
+			StringBuilder sb = new StringBuilder();
+			Set<String> set = new HashSet<String>();
+			List<String> list = new ArrayList<String>();
+			for(int i=0;i<cis.size();i++){
+				JSONArray ci = cis.getJSONArray(i);
+				sb.append("'" + ci.toString().replace("'", "''") + "',");
+				set.add(ci.toString());
+			}
+			String ci_cql = sb.toString();
+			ci_cql = ci_cql.substring(0, ci_cql.length()-1);
+			String cql = "SELECT * from perf.kpi_ci where ci in (" + ci_cql + ");";
+			ResultSet rs = session.execute(cql);
+			if(rs!=null){
+				for (Row row : rs) {
+					String ciStr = row.getString("ci");
+					JSONArray jsArr = JSONArray.fromObject(row.getString("kpis"));
+					JSONArray kpis = new JSONArray();
+					for(int i=0;i<jsArr.size();i++){
+						JSONObject jsObj = jsArr.getJSONObject(i);
+						if(!jsObj.toString().equals(kpi.toString())){
+							kpis.add(jsObj);
+						}
+					}
+					kpis.add(kpi);
+					list.add("insert into perf.kpi_ci(ci, kpis) values('"+ciStr.replace("'", "''")+"', '"+kpis.toString().replace("'", "''")+"');");
+					set.remove(ciStr);
+				}
+			}
+			for(String ciStr:set){
+				JSONArray kpis = new JSONArray();
+				kpis.add(kpi);
+				list.add("insert into perf.kpi_ci(ci, kpis) values('"+ciStr.replace("'", "''")+"', '"+kpis.toString().replace("'", "''")+"');");
+			}
+			for(String add_cql:list){
+				session.execute(add_cql);
+			}
+		}catch(Exception e){
+			log.eLog(e.getMessage());
+		}
+	}
+	
+	/**
+	 * 按CI获取匹配的KPI
+	 * 
+	 * **/
+	public static JSONArray getKpiByCi(String ci){
+		try{
+			ResultSet rs = session.execute("SELECT * FROM perf.kpi_ci where ci='"+ci.replace("'", "''")+"';");
+			if(rs!=null){
+				for (Row row : rs) {
+					JSONArray jsArr = JSONArray.fromObject(row.getString("kpis"));
+					return jsArr;
+				}
+			}
+			return new JSONArray();
+		}catch(Exception e){
+			log.eLog(e.getMessage());
+			return new JSONArray();
+		}
+	}
+	
+	/**
+	 * 按CI获取匹配的KPI
+	 * 
+	 * **/
+	public static Map<String, List<String>> getKpi(){
+		try{
+			Map<String, List<String>> result = new HashMap<String, List<String>>();
+			ResultSet rs = session.execute("SELECT * FROM perf.kpi_ci;");
+			if(rs!=null){
+				for (Row row : rs) {
+					JSONArray jsArr = JSONArray.fromObject(row.getString("kpis"));
+					String ci = row.getString("ci");
+					for(int i=0;i<jsArr.size();i++){
+						JSONObject kpiJs = jsArr.getJSONObject(i);
+						List<String> cis = result.get(kpiJs.toString());
+						if(cis==null){
+							cis = new ArrayList<String>();
+						}
+						cis.add(ci);
+						result.put(kpiJs.toString(), cis);
+					}
+				}
+			}
+			return result;
+		}catch(Exception e){
+			log.eLog(e.getMessage());
+			return new HashMap<String, List<String>>();
+		}
+	}
+	
+	/**
+	 * 删除CI下的KPI
+	 * 
+	 * **/
+	public static void deleteKpiByCi(String ci){
+		try{
+			session.execute("DELETE FROM perf.kpi_ci where ci='"+ci.replace("'", "''")+"';");
+		}catch(Exception e){
+			log.eLog(e.getMessage());
+		}
+	}
+	
+	/**
+	 * 根据传入的key，starttime，endtime进行kpi查询
+	 * 
+	 * **/
+	public static List<Map<String, Object>> getPerfdataByKey(List<String> keys, Long startTime, Long endTime, int times){
+		try{
+			List<Map<String, Object>> result = new ArrayList<Map<String, Object>>();
+			for(String key:keys){
+				ResultSet rs = session.execute("SELECT * FROM perf.perfdata where key = '"+key.replace("'", "''")+"' and time>="+startTime+" and time<"+endTime+" order by time ;");
+				if(rs!=null){
+					for (Row row : rs) {
+						Map<String, Object> map = new HashMap<String, Object>();
+						map.put("val", row.getDouble("val"));
+						map.put("key", row.getString("key"));
+						map.put("timestamp", row.getLong("time"));
+						result.add(map);
+					}
+				}
+			}
+			
+			return result;
+		}catch(Exception e){
+			log.eLog("getPerfdataByKey===="+times);
+			log.eLog(e.getMessage());
+			if(times<10){
+				return CDao.getPerfdataByKey(keys, startTime, endTime, times+1);
+			}else{
+				return new ArrayList<Map<String, Object>>();
+			}
+		}
+	}
+	
+	/**
+	 * 根据传入的key查询当前kpi数据
+	 * 
+	 * **/
+	public static Map<String, Object> getNowPerfdataByKey(List<String> keys, Long timestamp, int times){
+		try{
+			Map<String, Object> map = new HashMap<String, Object>();
+			for(String key:keys){
+				ResultSet rs = session.execute("SELECT * FROM perf.perfdata where key = '"+key.replace("'", "''")+"' and time<="+timestamp+" order by time desc limit 1;");
+				if(rs!=null){
+					for (Row row : rs) {
+						if(map.get("timestamp")!=null){
+							if(((Long)map.get("timestamp"))<row.getLong("time")){
+								map.put("val", row.getDouble("val"));
+								map.put("key", row.getString("key"));
+								map.put("timestamp", row.getLong("time"));
+							}
+						}else{
+							map.put("val", row.getDouble("val"));
+							map.put("key", row.getString("key"));
+							map.put("timestamp", row.getLong("time"));
+						}
+					}
+				}
+			}
+			if(map.get("timestamp")!=null){
+				return map;
+			}
+			
+			return null;
+		}catch(Exception e){
+			log.eLog("getNowPerfdataByKey===="+times);
+			log.eLog(e.getMessage());
+			if(times<10){
+				return CDao.getNowPerfdataByKey(keys, timestamp, times+1);
+			}else{
+				return null;
+			}
+		}
+	}
+	
+	/**
+	 * 向cassandra插入性能
+	 * 
+	 * 
+	 * **/
+	public static void insertPerf(String key, Double val, Long timestamp, Long rawTime, int times){
+		try{
+			String cql = "INSERT INTO perf.perfdata(key,val,time,rawTime) VALUES('"+key+"',"+val+","+timestamp+","+rawTime+");";
+			session.execute(cql);
+		}catch(Exception e){
+			log.eLog("insertPerf===="+times);
+			log.eLog(e.getMessage());
+			if(times<10){
+				CDao.insertPerf(key, val, timestamp, rawTime, times+1);
+			}
+		}
+	}
+	
+	/**
+	 * 向cassandra删除性能
+	 * 
+	 * 
+	 * **/
+	public static void deletePerf(String key, Long timestamp, int times){
+		try{
+			String cql = "DELETE FROM perf.perfdata WHERE key='"+key+"' and time="+timestamp+";";
+			session.execute(cql);
+		}catch(Exception e){
+			log.eLog("deletePerf===="+times);
+			log.eLog(e.getMessage());
+			if(times<10){
+				CDao.deletePerf(key, timestamp, times+1);
+			}
+		}
+	}
+	
+	/**
+	 * 向cassandra清空性能
+	 * 
+	 * 
+	 * **/
+	public static void removePerfData(){
+		excuteCql("drop table perf.perfdes;");
+		excuteCql("create table perf.perfdes(key text,primary key(key));");
+		excuteCql("drop table perf.separatetime;");
+		excuteCql("create table perf.separatetime(key text,time bigint,primary key(key,time));");
+		excuteCql("drop table perf.perfdata;");
+		excuteCql("create table perf.perfdata(key text,time bigint,rawtime bigint,val double,primary key(key,time));");
+		excuteCql("drop table perf.kpi_ci;");
+		excuteCql("create table perf.kpi_ci(ci text,kpis text,primary key(ci));");
+	}
+	
+	/**
+	 * 向cassandra插入事件
+	 * 
+	 * 
+	 * **/
+	
+	public static JSONObject insertEvent(JSONArray event){
+		try{
+			JSONObject result = new JSONObject();
+			String cqlName = "";
+			String cqlVal = "";
+			for(int i=0;i<event.size();i++){
+				JSONObject attr = event.getJSONObject(i);
+				if(attr.getString("type").equals("string")){
+					cqlVal = cqlVal + "'" + attr.getString("val").replace("'", "''") + "',";
+				}else{
+					cqlVal = cqlVal +  attr.getString("val") + ",";
+				}
+				cqlName = cqlName + attr.getString("name") + ",";
+				result.put(attr.getString("name"), attr.getString("val"));
+			}
+			cqlName = cqlName.substring(0, cqlName.length()-1);
+			cqlVal = cqlVal.substring(0, cqlVal.length()-1);
+			String cql = "INSERT INTO perf.event_info("+cqlName+") VALUES("+cqlVal+");";
+			session.execute(cql);
+			return result;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return null;
+		}
+	}
+	
+	/**
+	 * 向cassandra删除事件
+	 * 
+	 * 
+	 * **/
+	
+	public static JSONArray deleteEvent(String eid, Long arrivalTime, Long modifyTime, String status){
+		try{
+			ResultSet rs = session.execute("SELECT * FROM perf.eid_ci where eid='"+eid.replace("'", "''")+"';");
+			JSONArray cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			
+			for(int i=0;i<cisExist.size();i++){
+				JSONArray ciExist = cisExist.getJSONArray(i);
+				JSONArray eidsAll = new JSONArray();
+				rs = session.execute("SELECT * FROM perf.event_ci where ci='"+ciExist.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+				if(rs!=null){
+					for (Row row : rs) {
+						eidsAll = JSONArray.fromObject(row.getString("eids"));
+					}
+				}
+				eidsAll.remove(eid);
+				String cql = "INSERT INTO perf.event_ci(ci,arrivalTime,eids) VALUES('"+ciExist.toString().replace("'", "''")+"',"+arrivalTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+				session.execute(cql);
+				
+				if(status.equals("OPEN")){
+					modifyTime = 1999999999999L;
+				}
+				eidsAll = null;
+				rs = session.execute("SELECT * FROM perf.event_ci_modify where ci='"+ciExist.toString().replace("'", "''")+"' and modifyTime="+modifyTime+";");
+				if(rs!=null){
+					for (Row row : rs) {
+						eidsAll = JSONArray.fromObject(row.getString("eids"));
+					}
+				}
+				if(eidsAll==null){
+					eidsAll = new JSONArray();
+				}
+				eidsAll.remove(eid);
+				cql = "INSERT INTO perf.event_ci_modify(ci,modifyTime,eids) VALUES('"+ciExist.toString().replace("'", "''")+"',"+modifyTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			String cql = "DELETE FROM perf.eid_ci where eid='"+eid.replace("'", "''")+"';";
+			session.execute(cql);
+			
+			return cisExist;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return new JSONArray();
+		}
+	}
+	
+	/**
+	 * 向cassandra删除影响事件
+	 * 
+	 * 
+	 * **/
+	
+	public static JSONArray deleteImpactedEvent(String eid, Long arrivalTime, Long modifyTime, String status){
+		try{
+			ResultSet rs = session.execute("SELECT * FROM perf.eid_ci_impact where eid='"+eid.replace("'", "''")+"';");
+			JSONArray cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			
+			for(int i=0;i<cisExist.size();i++){
+				JSONArray ciExist = cisExist.getJSONArray(i);
+				JSONArray eidsAll = new JSONArray();
+				rs = session.execute("SELECT * FROM perf.event_ci_impact where ci='"+ciExist.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+				if(rs!=null){
+					for (Row row : rs) {
+						eidsAll = JSONArray.fromObject(row.getString("eids"));
+					}
+				}
+				eidsAll.remove(eid);
+				String cql = "INSERT INTO perf.event_ci_impact(ci,arrivalTime,eids) VALUES('"+ciExist.toString().replace("'", "''")+"',"+arrivalTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+				session.execute(cql);
+				
+				if(status.equals("OPEN")){
+					modifyTime = 1999999999999L;
+				}
+				eidsAll = null;
+				rs = session.execute("SELECT * FROM perf.event_ci_modify_impact where ci='"+ciExist.toString().replace("'", "''")+"' and modifyTime="+modifyTime+";");
+				if(rs!=null){
+					for (Row row : rs) {
+						eidsAll = JSONArray.fromObject(row.getString("eids"));
+					}
+				}
+				if(eidsAll==null){
+					eidsAll = new JSONArray();
+				}
+				eidsAll.remove(eid);
+				cql = "INSERT INTO perf.event_ci_modify_impact(ci,modifyTime,eids) VALUES('"+ciExist.toString().replace("'", "''")+"',"+modifyTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			String cql = "DELETE FROM perf.eid_ci_impact where eid='"+eid.replace("'", "''")+"';";
+			session.execute(cql);
+			
+			return cisExist;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return new JSONArray();
+		}
+	}
+	
+	/**
+	 * 向cassandra删除事件(特定CI)
+	 * 
+	 * 
+	 * **/
+	
+	public static void deleteEventByCi(String ci, String eid){
+		try{
+			Set<String> eids = new HashSet<String>();
+			eids.add(eid);
+			Map<String, Map<String, Object>> ev = CDao.queryEventByEids(eids);
+			JSONArray eidsAll = new JSONArray();
+			ResultSet rs = session.execute("SELECT * FROM perf.event_ci where ci='"+ci.replace("'", "''")+"' and arrivalTime="+((Long)ev.get(eid).get("arrivalTime"))+";");
+			if(rs!=null){
+				for (Row row : rs) {
+					eidsAll = JSONArray.fromObject(row.getString("eids"));
+				}
+			}
+			eidsAll.remove(eid);
+			String cql = "INSERT INTO perf.event_ci(ci,arrivalTime,eids) VALUES('"+ci.replace("'", "''")+"',"+((Long)ev.get(eid).get("arrivalTime"))+",'"+eidsAll.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			Long modifyTime = (Long)ev.get(eid).get("modifyTime");
+			if(((String)ev.get(eid).get("status")).equals("OPEN")){
+				modifyTime = 1999999999999L;
+			}
+			eidsAll = new JSONArray();
+			rs = session.execute("SELECT * FROM perf.event_ci_modify where ci='"+ci.replace("'", "''")+"' and modifyTime="+modifyTime+";");
+			if(rs!=null){
+				for (Row row : rs) {
+					eidsAll = JSONArray.fromObject(row.getString("eids"));
+				}
+			}
+			eidsAll.remove(eid);
+			cql = "INSERT INTO perf.event_ci_modify(ci,modifyTime,eids) VALUES('"+ci.replace("'", "''")+"',"+modifyTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			rs = session.execute("SELECT * FROM perf.eid_ci where eid='"+eid.replace("'", "''")+"';");
+			JSONArray cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			cisExist.remove(JSONArray.fromObject(ci));
+			cql = "INSERT INTO perf.eid_ci(eid,cis) VALUES('"+eid.replace("'", "''")+"','"+cisExist.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			/*
+			eidsAll = new JSONArray();
+			rs = session.execute("SELECT * FROM perf.event_ci_impact where ci='"+ci.replace("'", "''")+"' and arrivalTime="+((Long)ev.get(eid).get("arrivalTime"))+";");
+			if(rs!=null){
+				for (Row row : rs) {
+					eidsAll = JSONArray.fromObject(row.getString("eids"));
+				}
+			}
+			eidsAll.remove(eid);
+			cql = "INSERT INTO perf.event_ci_impact(ci,arrivalTime,eids) VALUES('"+ci.replace("'", "''")+"',"+((Long)ev.get(eid).get("arrivalTime"))+",'"+eidsAll.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			eidsAll = new JSONArray();
+			rs = session.execute("SELECT * FROM perf.event_ci_modify_impact where ci='"+ci.replace("'", "''")+"' and modifyTime="+modifyTime+";");
+			if(rs!=null){
+				for (Row row : rs) {
+					eidsAll = JSONArray.fromObject(row.getString("eids"));
+				}
+			}
+			eidsAll.remove(eid);
+			cql = "INSERT INTO perf.event_ci_modify_impact(ci,modifyTime,eids) VALUES('"+ci.replace("'", "''")+"',"+modifyTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			rs = session.execute("SELECT * FROM perf.eid_ci_impact where eid='"+eid.replace("'", "''")+"';");
+			cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			cisExist.remove(JSONArray.fromObject(ci));
+			cql = "INSERT INTO perf.eid_ci_impact(eid,cis) VALUES('"+eid.replace("'", "''")+"','"+cisExist.toString().replace("'", "''")+"');";
+			session.execute(cql);*/
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+	}
+	
+	/**
+	 * 插入eid与ci关系
+	 * 
+	 * 
+	 * **/
+	
+	public static boolean ciLinkToEvent(String eid, Long arrivalTime, Long modifyTime, String status, JSONArray cis){
+		try{
+			if(cis!=null){
+				for(int i=0;i<cis.size();i++){
+					JSONArray ci = cis.getJSONArray(i);
+					JSONArray eidsAll = null;
+					ResultSet rs = session.execute("SELECT * FROM perf.event_ci where ci='"+ci.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+					if(rs!=null){
+						for (Row row : rs) {
+							eidsAll = JSONArray.fromObject(row.getString("eids"));
+						}
+					}
+					if(eidsAll==null){
+						eidsAll = new JSONArray();
+					}
+					eidsAll.remove(eid);
+					eidsAll.add(eid);
+					String cql = "INSERT INTO perf.event_ci(ci,arrivalTime,eids) VALUES('"+ci.toString().replace("'", "''")+"',"+arrivalTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+					session.execute(cql);
+					
+					if("OPEN".equals(status)){
+						modifyTime = 1999999999999L;
+					}else{
+						eidsAll = null;
+						rs = session.execute("SELECT * FROM perf.event_ci_modify where ci='"+ci.toString().replace("'", "''")+"' and modifyTime=1999999999999;");
+						if(rs!=null){
+							for (Row row : rs) {
+								eidsAll = JSONArray.fromObject(row.getString("eids"));
+							}
+						}
+						if(eidsAll==null){
+							eidsAll = new JSONArray();
+						}
+						eidsAll.remove(eid);
+						cql = "INSERT INTO perf.event_ci_modify(ci,modifyTime,eids) VALUES('"+ci.toString().replace("'", "''")+"',1999999999999,'"+eidsAll.toString().replace("'", "''")+"');";
+						session.execute(cql);
+					}
+					eidsAll = null;
+					rs = session.execute("SELECT * FROM perf.event_ci_modify where ci='"+ci.toString().replace("'", "''")+"' and modifyTime="+modifyTime+";");
+					if(rs!=null){
+						for (Row row : rs) {
+							eidsAll = JSONArray.fromObject(row.getString("eids"));
+						}
+					}
+					if(eidsAll==null){
+						eidsAll = new JSONArray();
+					}
+					eidsAll.remove(eid);
+					eidsAll.add(eid);
+					cql = "INSERT INTO perf.event_ci_modify(ci,modifyTime,eids) VALUES('"+ci.toString().replace("'", "''")+"',"+modifyTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+					session.execute(cql);
+					
+					cql = "INSERT INTO perf.ciset_event(ci) VALUES('"+ci.toString().replace("'", "''")+"');";
+					session.execute(cql);
+				}
+				String cql = "INSERT INTO perf.eid_ci(eid,cis) VALUES('"+eid.replace("'", "''")+"','"+cis.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			return true;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
+	 * 插入影响eid与ci关系
+	 * 
+	 * 
+	 * **/
+	
+	public static boolean ciLinkToImpactedEvent(String eid, Long arrivalTime, Long modifyTime, String status, JSONArray cis){
+		try{
+			if(cis!=null){
+				for(int i=0;i<cis.size();i++){
+					JSONArray ci = cis.getJSONArray(i);
+					JSONArray eidsAll = null;
+					ResultSet rs = session.execute("SELECT * FROM perf.event_ci_impact where ci='"+ci.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+					if(rs!=null){
+						for (Row row : rs) {
+							eidsAll = JSONArray.fromObject(row.getString("eids"));
+						}
+					}
+					if(eidsAll==null){
+						eidsAll = new JSONArray();
+					}
+					eidsAll.remove(eid);
+					eidsAll.add(eid);
+					String cql = "INSERT INTO perf.event_ci_impact(ci,arrivalTime,eids) VALUES('"+ci.toString().replace("'", "''")+"',"+arrivalTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+					session.execute(cql);
+					
+					if("OPEN".equals(status)){
+						modifyTime = 1999999999999L;
+					}else{
+						eidsAll = null;
+						rs = session.execute("SELECT * FROM perf.event_ci_modify_impact where ci='"+ci.toString().replace("'", "''")+"' and modifyTime=1999999999999;");
+						if(rs!=null){
+							for (Row row : rs) {
+								eidsAll = JSONArray.fromObject(row.getString("eids"));
+							}
+						}
+						if(eidsAll==null){
+							eidsAll = new JSONArray();
+						}
+						eidsAll.remove(eid);
+						cql = "INSERT INTO perf.event_ci_modify_impact(ci,modifyTime,eids) VALUES('"+ci.toString().replace("'", "''")+"',1999999999999,'"+eidsAll.toString().replace("'", "''")+"');";
+						session.execute(cql);
+					}
+					eidsAll = null;
+					rs = session.execute("SELECT * FROM perf.event_ci_modify_impact where ci='"+ci.toString().replace("'", "''")+"' and modifyTime="+modifyTime+";");
+					if(rs!=null){
+						for (Row row : rs) {
+							eidsAll = JSONArray.fromObject(row.getString("eids"));
+						}
+					}
+					if(eidsAll==null){
+						eidsAll = new JSONArray();
+					}
+					eidsAll.remove(eid);
+					eidsAll.add(eid);
+					cql = "INSERT INTO perf.event_ci_modify_impact(ci,modifyTime,eids) VALUES('"+ci.toString().replace("'", "''")+"',"+modifyTime+",'"+eidsAll.toString().replace("'", "''")+"');";
+					session.execute(cql);
+				}
+				String cql = "INSERT INTO perf.eid_ci_impact(eid,cis) VALUES('"+eid.replace("'", "''")+"','"+cis.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			return true;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
+	 * 获取所有有事件的CI
+	 * 
+	 * 
+	 * **/
+	
+	public static List<String> getCiSetEvent(){
+		try{
+			List<String> result = new ArrayList<String>();
+			ResultSet rs = session.execute("SELECT * FROM perf.ciset_event;");
+			if(rs!=null){
+				for (Row row : rs) {
+					String ci = row.getString("ci");
+					result.add(ci);
+				}
+			}
+			return result;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 按CI获取EID
+	 * 
+	 * 
+	 * **/
+	
+	public static Map<String, Object> queryEidByCIs(List<String> cis, Long startTime, Long endTime){
+		try{
+			if(cis!=null){
+				StringBuilder sb = new StringBuilder();
+				for(String ci:cis){
+					sb.append("'" + ci.replace("'", "''") + "',");
+				}
+				String cql_cis = sb.toString();
+				
+				if(cql_cis.length()>0){
+					cql_cis = cql_cis.substring(0, cql_cis.length()-1);
+					ResultSet rs = null;
+					if(System.currentTimeMillis()-endTime<=endTime-1388505600000L){
+						rs = session.execute("SELECT * FROM perf.event_ci_modify where ci in ("+cql_cis+")"+" and modifyTime>="+startTime+";");
+					}else{
+						rs = session.execute("SELECT * FROM perf.event_ci where ci in ("+cql_cis+")"+" and arrivalTime<="+endTime+";");
+					}
+					
+					if(rs!=null){
+						Map<String, Set<String>> result = new HashMap<String, Set<String>>();
+						Set<String> eidsSet = new HashSet<String>();
+						for (Row row : rs) {
+							String ci = row.getString("ci");
+							JSONArray eids = JSONArray.fromObject(row.getString("eids"));
+							Set<String> eidSet = new HashSet<String>();
+							if(result.containsKey(ci)){
+								eidSet = result.get(ci);
+							}
+							for(int i=0;i<eids.size();i++){
+								String eid = eids.getString(i);
+								eidSet.add(eid);
+								eidsSet.add(eid);
+							}
+							result.put(ci, eidSet);
+						}
+						Map<String, Object> ret = new HashMap<String, Object>();
+						ret.put("ci_eids", result);
+						ret.put("eids", eidsSet);
+						return ret;
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 按CI获取EID(影响)
+	 * 
+	 * 
+	 * **/
+	
+	public static Map<String, Object> queryImpactEidByCIs(List<String> cis, Long startTime, Long endTime){
+		try{
+			if(cis!=null){
+				StringBuilder sb = new StringBuilder();
+				for(String ci:cis){
+					sb.append("'" + ci.replace("'", "''") + "',");
+				}
+				String cql_cis = sb.toString();
+				
+				if(cql_cis.length()>0){
+					cql_cis = cql_cis.substring(0, cql_cis.length()-1);
+					ResultSet rs = null;
+					if(System.currentTimeMillis()-endTime<=endTime-1388505600000L){
+						rs = session.execute("SELECT * FROM perf.event_ci_modify_impact where ci in ("+cql_cis+")"+" and modifyTime>="+startTime+";");
+					}else{
+						rs = session.execute("SELECT * FROM perf.event_ci_impact where ci in ("+cql_cis+")"+" and arrivalTime<="+endTime+";");
+					}
+					
+					if(rs!=null){
+						Map<String, Set<String>> result = new HashMap<String, Set<String>>();
+						Set<String> eidsSet = new HashSet<String>();
+						for (Row row : rs) {
+							String ci = row.getString("ci");
+							JSONArray eids = JSONArray.fromObject(row.getString("eids"));
+							Set<String> eidSet = new HashSet<String>();
+							if(result.containsKey(ci)){
+								eidSet = result.get(ci);
+							}
+							for(int i=0;i<eids.size();i++){
+								String eid = eids.getString(i);
+								eidSet.add(eid);
+								eidsSet.add(eid);
+							}
+							result.put(ci, eidSet);
+						}
+						Map<String, Object> ret = new HashMap<String, Object>();
+						ret.put("ci_eids", result);
+						ret.put("eids", eidsSet);
+						return ret;
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 按EID获取事件
+	 * 
+	 * 
+	 * **/
+	
+	public static Map<String, Map<String, Object>> queryEventByEids(Set<String> eids){
+		try{
+			if(eids!=null){
+				StringBuilder sb = new StringBuilder();
+				for(String eid:eids){
+					sb.append("'" + eid.replace("'", "''") + "',");
+				}
+				String cql_eids = sb.toString();
+				if(cql_eids.length()>0){
+					cql_eids = cql_eids.substring(0, cql_eids.length()-1);
+					ResultSet rs = session.execute("SELECT * FROM perf.event_info where eid in ("+cql_eids+");");
+					if(rs!=null){
+						Map<String, Map<String, Object>> result = new HashMap<String, Map<String, Object>>();
+						for (Row row : rs) {
+							String eid = row.getString("eid");
+							Map<String, Object> event = new HashMap<String, Object>();
+							for(int i=0;i<eventAttrs.size();i++){
+								JSONObject attr = eventAttrs.getJSONObject(i);
+								if("string".equals(attr.getString("type"))){
+									event.put(attr.getString("name"), row.getString(attr.getString("name").toLowerCase()));
+								}else{
+									event.put(attr.getString("name"), row.getLong(attr.getString("name").toLowerCase()));
+								}
+							}
+							result.put(eid, event);
+						}
+						return result;
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	private static void excuteCql(String cql){
+		try{
+			session.execute(cql);
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+	}
+	
+	/**
+	 * 向cassandra清空事件
+	 * 
+	 * 
+	 * **/
+	public static void removeEventData(){
+		excuteCql("drop table perf.event_info;");
+		excuteCql("create table perf.event_info(eid text,ip text,hostname text,severity text,status text,msg text,app text,inst text,param text,original_severity text,arrivaltime bigint,modifytime bigint,tally bigint,primary key(eid));");
+		excuteCql("drop table perf.event_ci;");
+		excuteCql("create table perf.event_ci(ci text,arrivaltime bigint,eids text,primary key(ci,arrivaltime));");
+		excuteCql("drop table perf.event_ci_modify;");
+		excuteCql("create table perf.event_ci_modify(ci text,modifytime bigint,eids text,primary key(ci,modifytime));");
+		excuteCql("drop table perf.ciset_event;");
+		excuteCql("create table perf.ciset_event(ci text,primary key(ci));");
+		excuteCql("drop table perf.eid_ci;");
+		excuteCql("create table perf.eid_ci(eid text,cis text,primary key(eid));");
+		excuteCql("drop table perf.event_ci_impact;");
+		excuteCql("create table perf.event_ci_impact(ci text,arrivaltime bigint,eids text,primary key(ci,arrivaltime));");
+		excuteCql("drop table perf.event_ci_modify_impact;");
+		excuteCql("create table perf.event_ci_modify_impact(ci text,modifytime bigint,eids text,primary key(ci,modifytime));");
+		excuteCql("drop table perf.eid_ci_impact;");
+		excuteCql("create table perf.eid_ci_impact(eid text,cis text,primary key(eid));");
+	}
+	
+	/**
+	 * 保存台账报表配置
+	 * 
+	 * 
+	 * **/
+	
+	public static Boolean saveAssetReport(String name, String categoryId, String where, String groupBy, String oper, String operA, String chartType) {
+		try{
+			String cql = "INSERT INTO perf.report_asset(name,categoryid,wh,groupby,oper,opera, charttype) VALUES('"+name.replace("'", "''")+"','"+categoryId.replace("'", "''")+"','"+where.replace("'", "''")+"','"+groupBy.replace("'", "''")+"','"+oper.replace("'", "''")+"','"+operA.replace("'", "''")+"','"+chartType.replace("'", "''")+"');";
+			session.execute(cql);
+			return true;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
+	 * 获取所有台账报表配置
+	 * 
+	 * 
+	 * **/
+	
+	public static List<String> getAssetsReport(){
+		try{
+			List<String> result = new ArrayList<String>();
+			ResultSet rs = session.execute("SELECT name FROM perf.report_asset;");
+			if(rs!=null){
+				for (Row row : rs) {
+					result.add(row.getString("name"));
+				}
+			}
+			return result;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return new ArrayList<String>();
+		}
+	}
+	
+	/**
+	 * 按名称获取台账报表配置
+	 * 
+	 * 
+	 * **/
+	
+	public static Map<String, Object> getAssetReportByName(String name){
+		try{
+			ResultSet rs = session.execute("SELECT * FROM perf.report_asset where name='"+name.replace("'", "''")+"';");
+			if(rs!=null){
+				for (Row row : rs) {
+					Map<String, Object> result = new HashMap<String, Object>();
+					result.put("name", row.getString("name"));
+					result.put("categoryId", row.getString("categoryid"));
+					result.put("where", row.getString("wh"));
+					result.put("groupBy", row.getString("groupby"));
+					result.put("oper", row.getString("oper"));
+					result.put("operA", row.getString("opera"));
+					result.put("chartType", row.getString("charttype"));
+					return result;
+				}
+			}
+			return null;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return null;
+		}
+	}
+	
+	/**
+	 * 按名称删除台账报表配置
+	 * 
+	 * 
+	 * **/
+	
+	public static Boolean delAssetReportByNames(List<String> names) {
+		try{
+			String n = "";
+			for(String name:names){
+				n = n + "'" + name.replace("'", "''") + "',";
+			}
+			if(n.length()>0){
+				n = n.substring(0, n.length()-1);
+				String cql = "delete from perf.report_asset where name in ("+n+");";
+				session.execute(cql);
+			}
+			return true;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	//////////////新增///////////////
+	/**
+	 * 获取 impact_blacklist_new 中 id 的最大值
+	 * @return	
+	 */
+	public static Long getMaxIdForBlacklist() {
+		String cql = "select * from perf.impact_blacklist";
+		ResultSet rs = session.execute(cql);
+		Long maxId = null;
+		if (rs != null) {
+			for (Row row : rs) {
+				long temp = row.getLong("id");
+				if (maxId == null || maxId.compareTo(temp) == -1) {
+					maxId = temp;
+				}
+			}
+		}
+		if(maxId==null){
+			maxId = 0L;
+		}
+		return maxId;
+	}
+	
+	/**
+	 * 插入黑名单
+	 * @param name 
+	 * @param rule
+	 * @param desc
+	 * @return
+	 */
+	public static Boolean insertBlacklist(String name, String rule, String desc) {
+		try {
+			//设置id(递增)
+			Long id = getMaxIdForBlacklist() + 1;
+			String cql = "insert into perf.impact_blacklist (id,name,rule,description) values ("+id+",'"+name.replace("'", "''")+"','"+rule.replace("'", "''")+"','"+desc.replace("'", "''")+"')";
+			session.execute(cql);
+			return true;
+		} catch (Exception e) {
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
+	 * 删除黑名单
+	 * @param id
+	 * @return
+	 */
+	public static Boolean deleteBlacklist(Long id) {
+		try {
+			String cql = "delete from perf.impact_blacklist where id = " + id;
+			session.execute(cql);
+			return true;
+		} catch (Exception e) {
+			log.eLog(e.getMessage());
+			return false;
+		}
+		
+	}
+	
+	/**
+	 * 修改黑名单
+	 * @param id
+	 * @param name
+	 * @param rule
+	 * @param desc
+	 * @return
+	 */
+	public static Boolean updateBlacklist(Long id, String name, String rule, String desc) {
+		try {
+			String cql = "update perf.impact_blacklist set name='"+name.replace("'", "''")+"',rule='"+rule.replace("'", "''")+"',description='"+desc.replace("'", "''")+"' where id="+id;
+			session.execute(cql);
+			return true;
+		} catch (Exception e) {
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
+	 * 获取所有的黑名单
+	 * @return
+	 */
+	public static List<Map<String, String>> getBlacklist() {
+		try{
+			List<Map<String, String>> result = new ArrayList<Map<String, String>>();
+			ResultSet rs = session.execute("select * from perf.impact_blacklist");
+			if(rs!=null){
+				for (Row row : rs) {
+					Map<String, String> rule = new HashMap<String, String>();
+					rule.put("id", row.getLong("id") + "");
+					rule.put("name", row.getString("name"));
+					rule.put("rule", row.getString("rule"));
+					rule.put("description", row.getString("description"));
+					result.add(rule);
+				}
+				return result; //[{id=1002, description=desc2, rule=rule2, name=name2}, {id=1003, description=desc3, rule=rule3, name=name3}, {id=1001, description=desc1, rule=rule1, name=name1}]
+			}
+		}catch(Exception e){
+			log.eLog(e.getMessage());
+		}
+		return new ArrayList<Map<String, String>>();
+	}
+	
+	/**
+	 * 按CI获取TID
+	 * 
+	 * 
+	 * **/
+	public static Map<String, Object> queryTidByCIs(List<String> cis, Long startTime, Long endTime){
+		try{
+			if(cis!=null){
+				StringBuilder sb = new StringBuilder();
+				for(String ci:cis){
+					sb.append("'" + ci.replace("'", "''") + "',");
+				}
+				String cql_cis = sb.toString();
+				
+				if(cql_cis.length()>0){
+					cql_cis = cql_cis.substring(0, cql_cis.length()-1);
+					ResultSet rs = null;
+					if(System.currentTimeMillis()-endTime<=endTime-1388505600000L){
+						rs = session.execute("SELECT * FROM perf.ticket_ci_modify where ci in ("+cql_cis+")"+" and modifyTime>="+startTime+";");
+					}else{
+						rs = session.execute("SELECT * FROM perf.ticket_ci where ci in ("+cql_cis+")"+" and arrivalTime<="+endTime+";");
+					}
+					
+					if(rs!=null){
+						Map<String, Set<String>> result = new HashMap<String, Set<String>>();
+						Set<String> tidsSet = new HashSet<String>();
+						for (Row row : rs) {
+							String ci = row.getString("ci");
+							JSONArray tids = JSONArray.fromObject(row.getString("tids"));
+							Set<String> tidSet = new HashSet<String>();
+							if(result.containsKey(ci)){
+								tidSet = result.get(ci);
+							}
+							for(int i=0;i<tids.size();i++){
+								String tid = tids.getString(i);
+								tidSet.add(tid);
+								tidsSet.add(tid);
+							}
+							result.put(ci, tidSet);
+						}
+						Map<String, Object> ret = new HashMap<String, Object>();
+						ret.put("ci_tids", result);
+						ret.put("tids", tidsSet);
+						return ret;
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 按TID获取工单
+	 * 
+	 * 
+	 * **/
+	public static Map<String, Map<String, Object>> queryTicketByTids(Set<String> tids){
+		try{
+			if(tids!=null){
+				StringBuilder sb = new StringBuilder();
+				for(String tid:tids){
+					sb.append("'" + tid.replace("'", "''") + "',");
+				}
+				String cql_tids = sb.toString();
+				if(cql_tids.length()>0){
+					cql_tids = cql_tids.substring(0, cql_tids.length()-1);
+					ResultSet rs = session.execute("SELECT * FROM perf.ticket_info where tid in ("+cql_tids+");");
+					if(rs!=null){
+						Map<String, Map<String, Object>> result = new HashMap<String, Map<String, Object>>();
+						for (Row row : rs) {
+							String tid = row.getString("tid");
+							Map<String, Object> ticket = new HashMap<String, Object>();
+							ticket.put("tid", tid);
+							ticket.put("title", row.getString("title"));
+							ticket.put("severity", row.getString("severity"));
+							ticket.put("status", row.getString("status"));
+							ticket.put("msg", row.getString("msg"));
+							ticket.put("excute_person", row.getString("excute_person"));
+							ticket.put("arrivalTime", row.getLong("arrivaltime"));
+							ticket.put("modifyTime", row.getLong("modifytime"));
+							ticket.put("impact_app", row.getString("impact_app"));
+							ticket.put("event_id", row.getString("event_id"));
+							result.put(tid, ticket);
+						}
+						return result;
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 向cassandra插入工单
+	 * 
+	 * 
+	 * **/
+	public static JSONObject insertTicket(JSONArray ticket){
+		try{
+			JSONObject result = new JSONObject();
+			String cqlName = "";
+			String cqlVal = "";
+			for(int i=0;i<ticket.size();i++){
+				JSONObject attr = ticket.getJSONObject(i);
+				if(attr.getString("type").equals("string")){
+					cqlVal = cqlVal + "'" + attr.getString("val").replace("'", "''") + "',";
+				}else{
+					cqlVal = cqlVal +  attr.getString("val") + ",";
+				}
+				cqlName = cqlName + attr.getString("name") + ",";
+				result.put(attr.getString("name"), attr.getString("val"));
+			}
+			cqlName = cqlName.substring(0, cqlName.length()-1);
+			cqlVal = cqlVal.substring(0, cqlVal.length()-1);
+			String cql = "INSERT INTO perf.ticket_info("+cqlName+") VALUES("+cqlVal+");";
+			session.execute(cql);
+			return result;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return null;
+		}
+	}
+	
+	/**
+	 * 向cassandra删除工单
+	 * 
+	 * 
+	 * **/
+	public static JSONArray deleteTicket(String tid, Long arrivalTime, Long modifyTime, String status){
+		try{
+			ResultSet rs = session.execute("SELECT * FROM perf.tid_ci where tid='"+tid.replace("'", "''")+"';");
+			JSONArray cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			
+			for(int i=0;i<cisExist.size();i++){
+				JSONArray ciExist = cisExist.getJSONArray(i);
+				JSONArray tidsAll = new JSONArray();
+				rs = session.execute("SELECT * FROM perf.ticket_ci where ci='"+ciExist.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+				if(rs!=null){
+					for (Row row : rs) {
+						tidsAll = JSONArray.fromObject(row.getString("tids"));
+					}
+				}
+				tidsAll.remove(tid);
+				String cql = "INSERT INTO perf.ticket_ci(ci,arrivalTime,tids) VALUES('"+ciExist.toString().replace("'", "''")+"',"+arrivalTime+",'"+tidsAll.toString().replace("'", "''")+"');";
+				session.execute(cql);
+				
+				if(!(status.equals("已处理")||status.equals("已关闭"))){
+					modifyTime = 1999999999999L;
+				}
+				tidsAll = null;
+				rs = session.execute("SELECT * FROM perf.ticket_ci_modify where ci='"+ciExist.toString().replace("'", "''")+"' and modifyTime="+modifyTime+";");
+				if(rs!=null){
+					for (Row row : rs) {
+						tidsAll = JSONArray.fromObject(row.getString("tids"));
+					}
+				}
+				if(tidsAll==null){
+					tidsAll = new JSONArray();
+				}
+				tidsAll.remove(tid);
+				cql = "INSERT INTO perf.ticket_ci_modify(ci,modifyTime,tids) VALUES('"+ciExist.toString().replace("'", "''")+"',"+modifyTime+",'"+tidsAll.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			String cql = "DELETE FROM perf.tid_ci where tid='"+tid.replace("'", "''")+"';";
+			session.execute(cql);
+			
+			return cisExist;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return new JSONArray();
+		}
+	}
+	
+	/**
+	 * 向cassandra删除工单(特定CI)
+	 * 
+	 * 
+	 * **/
+	public static void deleteTicketByCi(String ci, String tid){
+		try{
+			Set<String> tids = new HashSet<String>();
+			tids.add(tid);
+			Map<String, Map<String, Object>> ti = CDao.queryTicketByTids(tids);
+			JSONArray tidsAll = new JSONArray();
+			ResultSet rs = session.execute("SELECT * FROM perf.ticket_ci where ci='"+ci.replace("'", "''")+"' and arrivalTime="+((Long)ti.get(tid).get("arrivalTime"))+";");
+			if(rs!=null){
+				for (Row row : rs) {
+					tidsAll = JSONArray.fromObject(row.getString("tids"));
+				}
+			}
+			tidsAll.remove(tid);
+			String cql = "INSERT INTO perf.ticket_ci(ci,arrivalTime,tids) VALUES('"+ci.replace("'", "''")+"',"+((Long)ti.get(tid).get("arrivalTime"))+",'"+tidsAll.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			Long modifyTime = (Long)ti.get(tid).get("modifyTime");
+			if(!(((String)ti.get(tid).get("status")).equals("已处理")||((String)ti.get(tid).get("status")).equals("已关闭"))){
+				modifyTime = 1999999999999L;
+			}
+			tidsAll = new JSONArray();
+			rs = session.execute("SELECT * FROM perf.ticket_ci_modify where ci='"+ci.replace("'", "''")+"' and modifyTime="+modifyTime+";");
+			if(rs!=null){
+				for (Row row : rs) {
+					tidsAll = JSONArray.fromObject(row.getString("tids"));
+				}
+			}
+			tidsAll.remove(tid);
+			cql = "INSERT INTO perf.ticket_ci_modify(ci,modifyTime,tids) VALUES('"+ci.replace("'", "''")+"',"+modifyTime+",'"+tidsAll.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			rs = session.execute("SELECT * FROM perf.tid_ci where tid='"+tid.replace("'", "''")+"';");
+			JSONArray cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			cisExist.remove(JSONArray.fromObject(ci));
+			cql = "INSERT INTO perf.tid_ci(tid,cis) VALUES('"+tid.replace("'", "''")+"','"+cisExist.toString().replace("'", "''")+"');";
+			session.execute(cql);
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+	}
+	
+	/**
+	 * 插入tid与ci关系
+	 * 
+	 * 
+	 * **/
+	public static boolean ciLinkToTicket(String tid, Long arrivalTime, Long modifyTime, String status, JSONArray cis){
+		try{
+			if(cis!=null){
+				for(int i=0;i<cis.size();i++){
+					JSONArray ci = cis.getJSONArray(i);
+					JSONArray tidsAll = null;
+					ResultSet rs = session.execute("SELECT * FROM perf.ticket_ci where ci='"+ci.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+					if(rs!=null){
+						for (Row row : rs) {
+							tidsAll = JSONArray.fromObject(row.getString("tids"));
+						}
+					}
+					if(tidsAll==null){
+						tidsAll = new JSONArray();
+					}
+					tidsAll.remove(tid);
+					tidsAll.add(tid);
+					String cql = "INSERT INTO perf.ticket_ci(ci,arrivalTime,tids) VALUES('"+ci.toString().replace("'", "''")+"',"+arrivalTime+",'"+tidsAll.toString().replace("'", "''")+"');";
+					session.execute(cql);
+					
+					if(!(status.equals("已处理")||status.equals("已关闭"))){
+						modifyTime = 1999999999999L;
+					}else{
+						tidsAll = null;
+						rs = session.execute("SELECT * FROM perf.ticket_ci_modify where ci='"+ci.toString().replace("'", "''")+"' and modifyTime=1999999999999;");
+						if(rs!=null){
+							for (Row row : rs) {
+								tidsAll = JSONArray.fromObject(row.getString("tids"));
+							}
+						}
+						if(tidsAll==null){
+							tidsAll = new JSONArray();
+						}
+						tidsAll.remove(tid);
+						cql = "INSERT INTO perf.ticket_ci_modify(ci,modifyTime,tids) VALUES('"+ci.toString().replace("'", "''")+"',1999999999999,'"+tidsAll.toString().replace("'", "''")+"');";
+						session.execute(cql);
+					}
+					tidsAll = null;
+					rs = session.execute("SELECT * FROM perf.ticket_ci_modify where ci='"+ci.toString().replace("'", "''")+"' and modifyTime="+modifyTime+";");
+					if(rs!=null){
+						for (Row row : rs) {
+							tidsAll = JSONArray.fromObject(row.getString("tids"));
+						}
+					}
+					if(tidsAll==null){
+						tidsAll = new JSONArray();
+					}
+					tidsAll.remove(tid);
+					tidsAll.add(tid);
+					cql = "INSERT INTO perf.ticket_ci_modify(ci,modifyTime,tids) VALUES('"+ci.toString().replace("'", "''")+"',"+modifyTime+",'"+tidsAll.toString().replace("'", "''")+"');";
+					session.execute(cql);
+					
+					cql = "INSERT INTO perf.ciset_ticket(ci) VALUES('"+ci.toString().replace("'", "''")+"');";
+					session.execute(cql);
+				}
+				String cql = "INSERT INTO perf.tid_ci(tid,cis) VALUES('"+tid.replace("'", "''")+"','"+cis.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			return true;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
+	 * 获取所有有工单的CI
+	 * 
+	 * 
+	 * **/
+	public static List<String> getCiSetTicket(){
+		try{
+			List<String> result = new ArrayList<String>();
+			ResultSet rs = session.execute("SELECT * FROM perf.ciset_ticket;");
+			if(rs!=null){
+				for (Row row : rs) {
+					String ci = row.getString("ci");
+					result.add(ci);
+				}
+			}
+			return result;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 向cassandra清空工单
+	 * 
+	 * 
+	 * **/
+	public static void removeTicketData(){
+		excuteCql("drop table perf.ticket_info;");
+		excuteCql("create table perf.ticket_info(tid text,title text,severity text,status text,msg text,excute_person text,impact_app text,event_id text,arrivaltime bigint,modifytime bigint,primary key(tid));");
+		excuteCql("drop table perf.ticket_ci;");
+		excuteCql("create table perf.ticket_ci(ci text,arrivaltime bigint,tids text,primary key(ci,arrivaltime));");
+		excuteCql("drop table perf.ticket_ci_modify;");
+		excuteCql("create table perf.ticket_ci_modify(ci text,modifytime bigint,tids text,primary key(ci,modifytime));");
+		excuteCql("drop table perf.ciset_ticket;");
+		excuteCql("create table perf.ciset_ticket(ci text,primary key(ci));");
+		excuteCql("drop table perf.tid_ci;");
+		excuteCql("create table perf.tid_ci(tid text,cis text,primary key(tid));");
+	}
+	
+	/**
+	 * 按CI获取CHID
+	 * 
+	 * 
+	 * **/
+	public static Map<String, Object> queryChidByCIs(List<String> cis, Long startTime, Long endTime){
+		try{
+			if(cis!=null){
+				StringBuilder sb = new StringBuilder();
+				for(String ci:cis){
+					sb.append("'" + ci.replace("'", "''") + "',");
+				}
+				String cql_cis = sb.toString();
+				
+				if(cql_cis.length()>0){
+					cql_cis = cql_cis.substring(0, cql_cis.length()-1);
+					ResultSet rs = null;
+					if(startTime==endTime){
+						rs = session.execute("SELECT * FROM perf.change_ci where ci in ("+cql_cis+")"+" and arrivalTime<="+endTime+" order by arrivalTime desc limit 10;");
+					}else{
+						rs = session.execute("SELECT * FROM perf.change_ci where ci in ("+cql_cis+")"+" and arrivalTime<="+endTime+" and arrivalTime>="+startTime+";");
+					}
+					
+					if(rs!=null){
+						Map<String, Set<String>> result = new HashMap<String, Set<String>>();
+						Set<String> chidsSet = new HashSet<String>();
+						for (Row row : rs) {
+							String ci = row.getString("ci");
+							JSONArray chids = JSONArray.fromObject(row.getString("chids"));
+							Set<String> chidSet = new HashSet<String>();
+							if(result.containsKey(ci)){
+								chidSet = result.get(ci);
+							}
+							for(int i=0;i<chids.size();i++){
+								String chid = chids.getString(i);
+								chidSet.add(chid);
+								chidsSet.add(chid);
+							}
+							result.put(ci, chidSet);
+						}
+						Map<String, Object> ret = new HashMap<String, Object>();
+						ret.put("ci_chids", result);
+						ret.put("chids", chidsSet);
+						return ret;
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 按CHID获取变更单
+	 * 
+	 * 
+	 * **/
+	public static Map<String, Map<String, Object>> queryChangeByChids(Set<String> chids){
+		try{
+			if(chids!=null){
+				StringBuilder sb = new StringBuilder();
+				for(String chid:chids){
+					sb.append("'" + chid.replace("'", "''") + "',");
+				}
+				String cql_chids = sb.toString();
+				if(cql_chids.length()>0){
+					cql_chids = cql_chids.substring(0, cql_chids.length()-1);
+					ResultSet rs = session.execute("SELECT * FROM perf.change_info where chid in ("+cql_chids+");");
+					if(rs!=null){
+						Map<String, Map<String, Object>> result = new HashMap<String, Map<String, Object>>();
+						for (Row row : rs) {
+							String chid = row.getString("chid");
+							Map<String, Object> change = new HashMap<String, Object>();
+							change.put("chid", chid);
+							change.put("title", row.getString("title"));
+							change.put("severity", row.getString("severity"));
+							change.put("status", row.getString("status"));
+							change.put("type", row.getString("type"));
+							change.put("msg", row.getString("msg"));
+							change.put("submit_person", row.getString("submit_person"));
+							change.put("approve_person", row.getString("approve_person"));
+							change.put("excute_person", row.getString("excute_person"));
+							change.put("arrivalTime", row.getLong("arrivaltime"));
+							change.put("real_start_time", row.getLong("real_start_time"));
+							change.put("real_end_time", row.getLong("real_end_time"));
+							change.put("plan_start_time", row.getLong("plan_start_time"));
+							change.put("plan_end_time", row.getLong("plan_end_time"));
+							change.put("impact_app", row.getString("impact_app"));
+							change.put("stop_service_flag", row.getString("stop_service_flag"));
+							result.put(chid, change);
+						}
+						return result;
+					}
+				}
+			}
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 向cassandra插入变更单
+	 * 
+	 * 
+	 * **/
+	public static JSONObject insertChange(JSONArray change){
+		try{
+			JSONObject result = new JSONObject();
+			String cqlName = "";
+			String cqlVal = "";
+			for(int i=0;i<change.size();i++){
+				JSONObject attr = change.getJSONObject(i);
+				if(attr.getString("type").equals("string")){
+					cqlVal = cqlVal + "'" + attr.getString("val").replace("'", "''") + "',";
+				}else{
+					cqlVal = cqlVal +  attr.getString("val") + ",";
+				}
+				cqlName = cqlName + attr.getString("name") + ",";
+				result.put(attr.getString("name"), attr.getString("val"));
+			}
+			cqlName = cqlName.substring(0, cqlName.length()-1);
+			cqlVal = cqlVal.substring(0, cqlVal.length()-1);
+			String cql = "INSERT INTO perf.change_info("+cqlName+") VALUES("+cqlVal+");";
+			session.execute(cql);
+			return result;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return null;
+		}
+	}
+	
+	/**
+	 * 向cassandra删除变更单
+	 * 
+	 * 
+	 * **/
+	public static JSONArray deleteChange(String chid, Long arrivalTime){
+		try{
+			ResultSet rs = session.execute("SELECT * FROM perf.chid_ci where chid='"+chid.replace("'", "''")+"';");
+			JSONArray cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			
+			for(int i=0;i<cisExist.size();i++){
+				JSONArray ciExist = cisExist.getJSONArray(i);
+				JSONArray chidsAll = new JSONArray();
+				rs = session.execute("SELECT * FROM perf.change_ci where ci='"+ciExist.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+				if(rs!=null){
+					for (Row row : rs) {
+						chidsAll = JSONArray.fromObject(row.getString("chids"));
+					}
+				}
+				chidsAll.remove(chid);
+				String cql = "INSERT INTO perf.change_ci(ci,arrivalTime,chids) VALUES('"+ciExist.toString().replace("'", "''")+"',"+arrivalTime+",'"+chidsAll.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			String cql = "DELETE FROM perf.chid_ci where chid='"+chid.replace("'", "''")+"';";
+			session.execute(cql);
+			
+			return cisExist;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return new JSONArray();
+		}
+	}
+	
+	/**
+	 * 向cassandra删除变更单(特定CI)
+	 * 
+	 * 
+	 * **/
+	public static void deleteChangeByCi(String ci, String chid){
+		try{
+			Set<String> chids = new HashSet<String>();
+			chids.add(chid);
+			Map<String, Map<String, Object>> ti = CDao.queryChangeByChids(chids);
+			JSONArray chidsAll = new JSONArray();
+			ResultSet rs = session.execute("SELECT * FROM perf.change_ci where ci='"+ci.replace("'", "''")+"' and arrivalTime="+((Long)ti.get(chid).get("arrivalTime"))+";");
+			if(rs!=null){
+				for (Row row : rs) {
+					chidsAll = JSONArray.fromObject(row.getString("chids"));
+				}
+			}
+			chidsAll.remove(chid);
+			String cql = "INSERT INTO perf.change_ci(ci,arrivalTime,chids) VALUES('"+ci.replace("'", "''")+"',"+((Long)ti.get(chid).get("arrivalTime"))+",'"+chidsAll.toString().replace("'", "''")+"');";
+			session.execute(cql);
+			
+			rs = session.execute("SELECT * FROM perf.chid_ci where chid='"+chid.replace("'", "''")+"';");
+			JSONArray cisExist = new JSONArray();
+			if(rs!=null){
+				for (Row row : rs) {
+					cisExist = JSONArray.fromObject(row.getString("cis"));
+				}
+			}
+			cisExist.remove(JSONArray.fromObject(ci));
+			cql = "INSERT INTO perf.chid_ci(chid,cis) VALUES('"+chid.replace("'", "''")+"','"+cisExist.toString().replace("'", "''")+"');";
+			session.execute(cql);
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+	}
+	
+	/**
+	 * 插入chid与ci关系
+	 * 
+	 * 
+	 * **/
+	public static boolean ciLinkToChange(String chid, Long arrivalTime, JSONArray cis){
+		try{
+			if(cis!=null){
+				for(int i=0;i<cis.size();i++){
+					JSONArray ci = cis.getJSONArray(i);
+					JSONArray chidsAll = null;
+					ResultSet rs = session.execute("SELECT * FROM perf.change_ci where ci='"+ci.toString().replace("'", "''")+"' and arrivalTime="+arrivalTime+";");
+					if(rs!=null){
+						for (Row row : rs) {
+							chidsAll = JSONArray.fromObject(row.getString("chids"));
+						}
+					}
+					if(chidsAll==null){
+						chidsAll = new JSONArray();
+					}
+					chidsAll.remove(chid);
+					chidsAll.add(chid);
+					String cql = "INSERT INTO perf.change_ci(ci,arrivalTime,chids) VALUES('"+ci.toString().replace("'", "''")+"',"+arrivalTime+",'"+chidsAll.toString().replace("'", "''")+"');";
+					session.execute(cql);
+					
+					cql = "INSERT INTO perf.ciset_change(ci) VALUES('"+ci.toString().replace("'", "''")+"');";
+					session.execute(cql);
+				}
+				String cql = "INSERT INTO perf.chid_ci(chid,cis) VALUES('"+chid.replace("'", "''")+"','"+cis.toString().replace("'", "''")+"');";
+				session.execute(cql);
+			}
+			return true;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+			return false;
+		}
+	}
+	
+	/**
+	 * 获取所有有变更单的CI
+	 * 
+	 * 
+	 * **/
+	public static List<String> getCiSetChange(){
+		try{
+			List<String> result = new ArrayList<String>();
+			ResultSet rs = session.execute("SELECT * FROM perf.ciset_change;");
+			if(rs!=null){
+				for (Row row : rs) {
+					String ci = row.getString("ci");
+					result.add(ci);
+				}
+			}
+			return result;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}
+		return null;
+	}
+	
+	/**
+	 * 向cassandra清空变更单
+	 * 
+	 * 
+	 * **/
+	public static void removeChangeData(){
+		excuteCql("drop table perf.change_info;");
+		excuteCql("create table perf.change_info(chid text,title text,severity text,status text,type text,msg text,submit_person text,approve_person text,excute_person text,impact_app text,stop_service_flag text,arrivaltime bigint,real_start_time bigint,real_end_time bigint,plan_start_time bigint,plan_end_time bigint,primary key(chid));");
+		excuteCql("drop table perf.change_ci;");
+		excuteCql("create table perf.change_ci(ci text,arrivaltime bigint,chids text,primary key(ci,arrivaltime));");
+		excuteCql("drop table perf.ciset_change;");
+		excuteCql("create table perf.ciset_change(ci text,primary key(ci));");
+		excuteCql("drop table perf.chid_ci;");
+		excuteCql("create table perf.chid_ci(chid text,cis text,primary key(chid));");
+	}
+
+	/**
+	 * 获取场景下孩子MAP
+	 * 
+	 * 
+	 * **/
+	public static Map getScChildrenMap(String scid){
+		ObjectInputStream ois = null;
+		try{
+//			ResultSet rs = session.execute("SELECT * FROM perf.dcv_children where scid='"+scid.replace("'", "''")+"';");
+//			if(rs!=null){
+//				for (Row row : rs) {
+//					return JSONObject.fromObject(row.getString("children"));
+//				}
+//			}
+			Long a2 = System.currentTimeMillis();
+			ois = new ObjectInputStream(new FileInputStream("data/dcvMap/"+scid+".dat"));
+			System.out.println("7777777777777777777777777777777777777777777777777999999");
+			Map newchildJs = (Map)ois.readObject();
+			Long a3 = System.currentTimeMillis();System.out.println("readDcvChildren===="+(a3-a2));
+			return newchildJs;
+		}catch(Exception e){
+			e.printStackTrace();
+			log.eLog(e.getMessage());
+		}finally{
+			if(ois!=null){
+				try {
+					ois.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+			ois = null;
+		}
+		return null;
+	}
+}

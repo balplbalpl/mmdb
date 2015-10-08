@@ -1,0 +1,89 @@
+<div class="box-border pd10 graph-viewtree">
+
+	<div class="text-center" ng-show="params.options.allowShowPubview">
+		<div class="btn-group">
+			<label class="btn btn-primary" ng-model="cateParams.open" btn-radio="false">私有视图</label>
+			<label class="btn btn-warning" ng-model="cateParams.open" btn-radio="true">公有视图</label>
+		</div>
+
+		<hr />
+
+	</div>
+
+	<div class="mt20">
+
+		<div class="mb10">
+			<treecontrol class="tree-classic"
+						 tree-model="treeData"
+						 options="treeOptions"
+						 on-node-toggle="showToggle(node, expanded)"
+						 on-selection="showSelected(node)">
+						{{node.name}}
+			</treecontrol>
+
+			<div class="alert alert-warning" ng-show="!treeData.length">
+				<div>没有分类数据</div>
+				<div>请先创建分类</div>
+			</div>
+		</div>
+
+		<div ng-if="params.options.allowEdit && !cateParams.open">
+
+			<div class="pd10" ng-show="isCollapsedCreateForm && !editCate.show">
+				<hr />
+
+				<div class="text-right mb20" ng-show="editCate">
+					<button class="btn btn-xs btn-link" ng-click="editCate.show = true;">编辑选中分类 <i class="fa fa-angle-right"></i></button>
+				</div>
+
+				<div class="alert alert-warning">提示: ROOT 为 根分类</div>
+
+				<div class="mb10">
+					<select class="form-control" ng-options="cate.name for cate in formatSelect(originalTreeData)" ng-model="form.cate">
+					</select>
+				</div>
+
+				<div class="row">
+					<div class="col-md-8">
+						<input type="text" class="form-control" placeholder="输入分类名称" ng-model="form.name" ng-enter="createCate()" />
+					</div>
+
+					<div class="col-md-4">
+						<button class="btn btn-primary" ng-click="createCate();">创建</button>
+					</div>
+				</div>
+
+			</div>
+
+			<div class="pd10" ng-show="isCollapsedCreateForm && editCate.show">
+
+				<hr />
+
+				<div class="text-right mb20">
+					<button class="btn btn-xs btn-link" ng-click="editCate.show = false;">创建分类 <i class="fa fa-angle-right"></i></button>
+				</div>
+
+				<div class="mb10">
+					<select class="form-control" ng-options="cate.name for cate in formatSelect(originalTreeData) | filter: {id: '!' + editCate.id}" ng-model="editCate.parent">
+					</select>
+				</div>
+
+				<div class="mb10">
+					<input type="text" class="form-control" ng-model="editCate.name" ng-enter="updateCate()" />
+				</div>
+
+				<div class="text-right">
+					<button class="btn btn-danger" ng-click="deleteCate();">删除</button>
+					<button class="btn btn-primary" ng-click="updateCate();">保存</button>
+				</div>
+			</div>
+
+			<div class="graph-collapse1" ng-click="isCollapsedCreateForm = !isCollapsedCreateForm">
+				<i class="fa fa-angle-up" ng-if="isCollapsedCreateForm"></i>
+				<i class="fa fa-angle-down" ng-if="!isCollapsedCreateForm"></i>
+			</div>
+		</div>
+
+	</div>
+
+</div>
